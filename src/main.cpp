@@ -4,6 +4,8 @@
 using myConst = Problem_Constants<float, std::vector<int>>;
 using myParams = Solution_Parameters<int, int>;
 
+Problem_Definition<myConst, myParams>::
+
 int main(int argc, char *argv[])
 {
     Problem_Definition<myConst, myParams> Prob_Def;

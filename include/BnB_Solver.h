@@ -10,6 +10,7 @@ template<typename... Args>
 using Solution_Parameters = std::tuple<Args...>;
 
 
+
 template<typename Prob_Consts, typename Sol_Params>
 class Problem_Definition
 {
@@ -18,9 +19,7 @@ public:
     std::function<Sol_Params(const Prob_Consts& prob)> GetInitialSolution = nullptr;
     std::function<std::vector<Sol_Params>(const Prob_Consts& consts, const Sol_Params& params)> SplitSolution = nullptr;
     std::function<bool(const Sol_Params&)> IsFeasible = nullptr;
-
-
-
+    std::function<void(const Sol_Params&)> GetBound = nullptr;
 
 
     // ... other functions ... //
