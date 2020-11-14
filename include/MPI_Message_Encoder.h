@@ -7,13 +7,13 @@
 template<typename T>
 void encodeParam(std::stringstream& ss, T p)
 {
-    assert(false); // if this is called it means that the encoder doesnt know how to encode
+    assert(false); // if this is called it means that the encoder doesnt know how to encode the current parameter T
 }
 
 template<typename T>
 void decodeParam(std::stringstream& ss, T &p)
 {
-    assert(false); // if this is called it means that the encoder doesnt know how to encode
+    assert(false); // if this is called it means that the encoder doesnt know how to encode the current parameter T
 }
 
 template<class Solution_Parameters>
