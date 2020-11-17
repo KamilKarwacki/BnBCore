@@ -5,7 +5,7 @@
 #include <tuple>
 
 template<typename T>
-void encodeParam(std::stringstream& ss, T p)
+void encodeParam(std::stringstream& ss, const T &p)
 {
     assert(false); // if this is called it means that the encoder doesnt know how to encode the current parameter T
 }
@@ -13,6 +13,7 @@ void encodeParam(std::stringstream& ss, T p)
 template<typename T>
 void decodeParam(std::stringstream& ss, T &p)
 {
+    std::cout << __PRETTY_FUNCTION__ << std::endl;
     assert(false); // if this is called it means that the encoder doesnt know how to encode the current parameter T
 }
 
@@ -37,33 +38,49 @@ public: // make it a friend of Solver maybe
    }
 };
 
-
+// --------------------------------------------------------------------------
+// specializations for different basic types including vectors of these types
+// TODO matrices of basic types
+// TODO C++20 concepts
+// --------------------------------------------------------------------------
 template<>
-void encodeParam<int>(std::stringstream& ss, int p)
+void encodeParam(std::stringstream& ss, const int& p)
 {
     ss << p << " ";
 }
 
 template<>
-void decodeParam<int>(std::stringstream& ss, int &p)
+void decodeParam(std::stringstream& ss, int &p)
 {
     ss >> p;
 }
 
 template<>
-void encodeParam<float>(std::stringstream& ss, float p)
+void encodeParam(std::stringstream& ss, const float& p)
 {
     ss << p << " ";
 }
 
 template<>
-void encodeParam<double>(std::stringstream& ss, double p)
+void decodeParam(std::stringstream& ss, float &p)
+{
+    ss >> p;
+}
+
+template<>
+void encodeParam(std::stringstream& ss, const double& p)
 {
     ss << p << " ";
 }
 
 template<>
-void encodeParam<std::vector<int>>(std::stringstream& ss, std::vector<int> p)
+void decodeParam(std::stringstream& ss, double &p)
+{
+    ss >> p;
+}
+
+template<>
+void encodeParam(std::stringstream& ss, const std::vector<int>& p)
 {
     size_t len = p.size();
     ss << len << " ";
@@ -73,4 +90,18 @@ void encodeParam<std::vector<int>>(std::stringstream& ss, std::vector<int> p)
         ss << p[i] << " ";
     }
 }
+
+template<>
+void decodeParam(std::stringstream& ss, std::vector<int>& p)
+{
+    size_t len;
+    ss >> len;
+    p.resize(len);
+
+    for(int i = 0; i < len; i++)
+    {
+        ss >> p[i];
+    }
+}
+
 

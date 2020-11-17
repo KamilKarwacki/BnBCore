@@ -14,6 +14,9 @@
                      MPI_Comm_rank(MPI_COMM_WORLD, &__id); \
                      std::cout << "proc "<< __id <<": " << x << std::endl;}\
 
+
+
+
 namespace myLib
 {
     template<typename... Args>
@@ -26,6 +29,8 @@ namespace myLib
 // how to store a function that returns any type and the user will specify which type it returns
 // use enum??  which will be set to define the domain
 // look at type_traits maybe it will help
+
+
 
 template<typename Prob_Consts, typename Subproblem_Params>
 class Problem_Definition
@@ -45,14 +50,13 @@ private:
 
 
 
-
 template<typename Prob_Consts, typename Subproblem_Params>
 class Solver
 {
 private:
     enum class Goal : bool {
        MAX = true,
-       MIN
+       MIN = false
     };
 
     MPI_Message_Encoder<Subproblem_Params> encoder;
@@ -64,16 +68,17 @@ public:
     void Maximize(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def, const Prob_Consts& prob)
     {
         goal = Goal::MAX;
-        BestSolution = std::numeric_limits<double>::lowest();
+        BestSolution = std::numeric_limits<double>::lowest()/2.0;
         Solve(Problem_Def, prob);
     }
 
     void Minimize(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def, const Prob_Consts& prob)
     {
         goal = Goal::MIN;
-        BestSolution = std::numeric_limits<double>::max();
+        BestSolution = std::numeric_limits<double>::max()/2.0;
         Solve(Problem_Def, prob);
     }
+
 };
 
 
@@ -87,6 +92,7 @@ void Solver<Prob_Consts, Subproblem_Params>::Solve(const Problem_Definition<Prob
     int pid, num;
     MPI_Comm_rank(MPI_COMM_WORLD, &pid);
     MPI_Comm_size(MPI_COMM_WORLD, &num);
+    assert(num >= 3 && "this implementation needs at least 3 cores");
     MPI_Status st;
     std::stringstream sendstream("");
     std::stringstream receivstream("");
@@ -148,12 +154,12 @@ void Solver<Prob_Consts, Subproblem_Params>::Solve(const Problem_Definition<Prob
                 printProc("got a feasible solution")
                 //slave has sent a feasible solution
                 Subproblem_Params Received_Solution;
-                encoder.Decode_Solution(receivstream);
+                encoder.Decode_Solution(receivstream, Received_Solution);
 
-                if(((bool)goal  && Problem_Def.GetBound(Received_Solution) > BestSolution) ||
-                   (!(bool)goal && Problem_Def.GetBound(Received_Solution) < BestSolution) ){ // optimize with template specialization
+                if(((bool)goal  && std::get<double>(Problem_Def.GetBound(prob, Received_Solution)) > BestSolution) ||
+                   (!(bool)goal && std::get<double>(Problem_Def.GetBound(prob, Received_Solution)) < BestSolution) ){ // optimize with template specialization
                     BestSubpoblem = Received_Solution;
-                    BestSolution = Problem_Def.GetBound(prob, BestSubpoblem);
+                    BestSolution = std::get<double>(Problem_Def.GetBound(prob, BestSubpoblem));
                 }
             }
 
@@ -186,20 +192,21 @@ void Solver<Prob_Consts, Subproblem_Params>::Solve(const Problem_Definition<Prob
                     Subproblem_Params sol = task_queue.front();
                     task_queue.pop();
                     //ignore if its bound is worse than already known best sol.
-                    if( ((bool)goal && (sol.get_bound()<BestSolution))
-                        || (!(bool)goal && (sol.get_bound()>BestSolution))){
+                    if( ((bool)goal && (std::get<double>(Problem_Def.GetBound(prob, sol))<BestSolution))
+                        || (!(bool)goal && (std::get<double>(Problem_Def.GetBound(prob, sol))>BestSolution))){
                         continue;
                     }
-                    if(Problem_Def.IsFeasible(sol)){
+                    if(Problem_Def.IsFeasible(prob, sol)){
                         printProc("found a feasible solution")
                         sendstream.str("");
-                        encoder.Decode_Solution(sendstream, sol);
+                        encoder.Encode_Solution(sendstream, sol);
+                        printProc("decoded sol");
                         //tell master that feasible solution is reached
                         MPI_Send(&sendstream.str()[0],strlen(sendstream.str().c_str())+1, MPI_CHAR,0,MessageType::DONE, MPI_COMM_WORLD);
                         sendstream.str("");
                         continue;
                     }
-                    std::vector<Subproblem_Params> v = Problem_Def.SplitSolution(sol);
+                    std::vector<Subproblem_Params> v = Problem_Def.SplitSolution(prob, sol);
 
                     for(int i=0;i<v.size();i++)
                         task_queue.push(v[i]);
@@ -229,7 +236,7 @@ void Solver<Prob_Consts, Subproblem_Params>::Solve(const Problem_Definition<Prob
                         sendstream.str("");
                         Subproblem_Params SubProb = task_queue.front();
                         task_queue.pop();
-                        encoder.Eecode_Solution(sendstream, SubProb);
+                        encoder.Encode_Solution(sendstream, SubProb);
                         sendstream << BestSolution << " ";
                         //send it to idle processor
                         printProc("sending subProblem to proc " << sl_no)
@@ -243,7 +250,7 @@ void Solver<Prob_Consts, Subproblem_Params>::Solve(const Problem_Definition<Prob
             }
             else if(st.MPI_TAG == MessageType::FINISH){
                 printProc("i got termination message from master")
-                        assert(st.MPI_SOURCE==0); // only master can tell it to finish
+                assert(st.MPI_SOURCE==0); // only master can tell it to finish
                 break; //from the while(1) loop
             }
         }

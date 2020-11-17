@@ -8,8 +8,8 @@ SET(CMAKE_CXX_STANDARD 17)
 #find_package(MPI REQUIRED)
 
 #add_executable("${PROJECT_NAME}" ${SRC})
-add_library("${PROJECT_NAME}" INTERFACE)
-target_include_directories("${PROJECT_NAME}" INTERFACE include/)
+#add_library("${PROJECT_NAME}" INTERFACE include/BnB_OMP_Solver.h)
+#target_include_directories("${PROJECT_NAME}" INTERFACE include/)
 
 #target_link_libraries(BnB PRIVATE MPI)
 #install(TARGETS ${EXECUTABLE_NAME} DESTINATION bin)
