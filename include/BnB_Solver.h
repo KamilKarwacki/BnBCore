@@ -50,6 +50,8 @@ private:
 
 
 
+
+
 template<typename Prob_Consts, typename Subproblem_Params>
 class Solver
 {
@@ -68,7 +70,12 @@ public:
     void Maximize(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def, const Prob_Consts& prob)
     {
         goal = Goal::MAX;
-        BestSolution = std::numeric_limits<double>::lowest()/2.0;
+        if(std::holds_alternative<int>(Problem_Def.GetBound()))
+            BestSolution = std::numeric_limits<int>::lowest()/2.0; // maybe use ::min
+        else if(std::holds_alternative<float>(Problem_Def.GetBound()))
+            BestSolution = std::numeric_limits<float>::lowest()/2.f;
+        else if(std::holds_alternative<double>(Problem_Def.GetBound()))
+            BestSolution = std::numeric_limits<double>::lowest()/2.f;
         Solve(Problem_Def, prob);
     }
 

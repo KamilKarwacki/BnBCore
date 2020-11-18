@@ -19,6 +19,7 @@ int main(int argc, char *argv[])
     };
 
     myConst c;
-    Solver<myConst, myParams> solver;
+    Solver_omp<myConst, myParams> solver;
+    solver.setNumThreads(2);
     solver.Maximize(Prob_Def, c);
 }
