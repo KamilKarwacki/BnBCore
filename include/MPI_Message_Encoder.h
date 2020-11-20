@@ -3,6 +3,7 @@
 #include <cassert>
 #include <vector>
 #include <tuple>
+#include <iostream>
 
 template<typename T>
 void encodeParam(std::stringstream& ss, const T &p)

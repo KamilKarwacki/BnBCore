@@ -16,8 +16,8 @@ private:
     size_t numThreads = 1;
 
     void Solve(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def, const Prob_Consts& prob);
-
     void PushTask(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def, const Prob_Consts& prob, Subproblem_Params& params);
+
 public:
     void setNumThreads(size_t num) {numThreads = num;};
     void Maximize(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def, const Prob_Consts& prob)
@@ -40,9 +40,12 @@ void Solver_omp<Prob_Consts, Subproblem_Params>::Solve(const Problem_Definition<
         const Prob_Consts& prob)
 {
 
-#pragma omp parallel {
-    int a;
-}
+#pragma omp parallel 
+	{
+	    printf("Hello World... from thread = %d\n", 
+						           omp_get_thread_num());
+	}  
+
 
 }
 
