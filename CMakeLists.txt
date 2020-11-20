@@ -1,20 +1,42 @@
-cmake_minimum_required(VERSION "3.7.1")
-project("BranchNBound")
+cmake_minimum_required(VERSION "3.15.2")
+project("BranchNBound" LANGUAGES CXX)
 
-#SET(CMAKE_C_COMPILER mpicc)
-#SET(CMAKE_CXX_COMPILER mpicxx)
-SET(CMAKE_CXX_STANDARD 17)
+# setting variables which will controll how to build 
+option(BUILD_WITH_OMP 
+		"Whether to build with MPI (to run on a cluster)" ON)
+option(BUILD_WITH_MPI 
+		"Whether to build with OMP (to run in parallel on a single machine)" OFF)
+option(PACKAGE_TESTING "Build the tests" OFF)
 
-#find_package(MPI REQUIRED)
-enable_testing()
-add_subdirectory(googletest)
-
-
-#add_executable("${PROJECT_NAME}" ${SRC})
+# our only target header only library
 add_library("${PROJECT_NAME}" INTERFACE)
 
-add_subdirectory(tests)
+if(BUILD_WITH_MPI)
+	find_package(MPI REQUIRED)
+	set(CMAKE_CXX_COMPILER mpicxx)
+endif()
+
+if(BUILD_WITH_OMP)
+	find_package(OpenMP)
+	if(OpenMP_CXX_FOUND)
+		message("set OMP as interface dependence")
+		target_link_libraries(${PROJECT_NAME} INTERFACE OpenMP::OpenMP_CXX)
+	endif()
+endif()
+
+# testing stuff
+if(PACKAGE_TESTING)
+	enable_testing()
+	include(GoogleTest)
+	add_subdirectory(tests)
+endif()
+
 #target_include_directories("${PROJECT_NAME}" INTERFACE include/)
 
-#target_link_libraries(BnB PRIVATE MPI)
-#install(TARGETS ${EXECUTABLE_NAME} DESTINATION bin)
+target_include_directories(
+		${PROJECT_NAME}
+		INTERFACE $<BUILD_INTERFACE:${${PROJECT_NAME}_SOURCE_DIR}/include>
+		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+
+target_compile_features(${PROJECT_NAME} INTERFACE cxx_std_17 -fopenmp)
+

@@ -11,15 +11,13 @@ private:
         MIN = false
     };
 
-    Goal goal;
-    double BestSolution; // should this hold different types
+    Goal goal = Goal::MAX;
+    double BestSolution = 0; // should this hold different types
     size_t numThreads = 1;
 
     void Solve(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def, const Prob_Consts& prob);
 
-    void PushTask(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
-            const Prob_Consts& prob,
-            Subproblem_Params& params);
+    void PushTask(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def, const Prob_Consts& prob, Subproblem_Params& params);
 public:
     void setNumThreads(size_t num) {numThreads = num;};
     void Maximize(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def, const Prob_Consts& prob)
@@ -37,12 +35,32 @@ public:
     }
 };
 
+template<typename Prob_Consts, typename Subproblem_Params>
+void Solver_omp<Prob_Consts, Subproblem_Params>::Solve(const Problem_Definition<Prob_Consts, Subproblem_Params>& def,
+        const Prob_Consts& prob)
+{
+
+#pragma omp parallel {
+    int a;
+}
+
+}
+
+template<typename Prob_Consts, typename Subproblem_Params>
+void PushTask(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
+              const Prob_Consts& prob,
+              Subproblem_Params& params)
+{
+
+}
+
+/*
 
 
 template<typename Prob_Consts, typename Subproblem_Params>
 void Solver_omp<Prob_Consts, Subproblem_Params>::Solve(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
                                                    const Prob_Consts& prob) {
-/*
+
 #pragma omp parallel shared(BestSolution) num_threads(numThreads){
 #pragma omp single{
     Subproblem_Params initial = Problem_Def.GetInitialSubproblem(prob);
@@ -53,7 +71,7 @@ void Solver_omp<Prob_Consts, Subproblem_Params>::Solve(const Problem_Definition<
         #pragma omp taskwait
     }
 };
- */
+
     //Subproblem_Params initial = Problem_Def.GetInitialSubproblem(prob);
     //PushTask(Problem_Def, prob, initial);
 }
@@ -85,6 +103,6 @@ void Solver_omp<Prob_Consts, Subproblem_Params>::PushTask(const Problem_Definiti
     }
 }
 
-
+*/
 
 
