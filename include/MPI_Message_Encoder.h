@@ -22,7 +22,7 @@ template<class Solution_Parameters>
 class MPI_Message_Encoder
 {
 public: // make it a friend of Solver maybe
-   void Encode_Solution(std::stringstream& ss, const Solution_Parameters& params)
+   void Encode_Solution(std::stringstream& ss, const Solution_Parameters& params) const
    {
         // takes ss stream by reference
         // lambda takes a list of args, these args are all elements of the tuple
@@ -30,7 +30,7 @@ public: // make it a friend of Solver maybe
         std::apply([&ss](auto&&... args) {(encodeParam(ss,args), ...);}, params); // applies encode parameter on all elements
    }
 
-   void Decode_Solution(std::stringstream& ss, Solution_Parameters& params)
+   void Decode_Solution(std::stringstream& ss, Solution_Parameters& params) const
    {
        // takes ss stream by reference
        // lambda takes a list of args, these args are all elements of the tuple
