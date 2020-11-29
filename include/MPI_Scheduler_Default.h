@@ -6,14 +6,20 @@ template<typename Prob_Consts, typename Subproblem_Params, typename Domain_Type>
 class MPI_Scheduler_Default : public MPI_Scheduler<Prob_Consts, Subproblem_Params, Domain_Type>
 {
 public:
-    void Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,const Prob_Consts& prob,const MPI_Message_Encoder<Subproblem_Params>& encoder,const Goal goal) override;
+    void Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
+                 const Prob_Consts& prob,
+                 const MPI_Message_Encoder<Subproblem_Params>& encoder,
+                 const Goal goal) override;
 };
 
 
 enum MessageType{PROB = 0, GET_SLAVES = 1, DONE = 2, IDLE = 3, FINISH = 4};
 
 template<typename Prob_Consts, typename Subproblem_Params, typename Domain_Type>
-void MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,const Prob_Consts& prob,const MPI_Message_Encoder<Subproblem_Params>& encoder,const Goal goal)
+void MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
+                                                                                 const Prob_Consts& prob,
+                                                                                 const MPI_Message_Encoder<Subproblem_Params>& encoder,
+                                                                                 const Goal goal)
 {
     MPI_Init(0,NULL);
     int pid, num;

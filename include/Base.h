@@ -16,9 +16,9 @@
 #include "omp.h"
 
 #define OMP_LOGGING 1
-#define MPI_LOGGING 0
+#define MPI_LOGGING 1
 
-#if MPI_LOGGING
+#if __MPI
 #define printProc(x) {int __id; \
                      MPI_Comm_rank(MPI_COMM_WORLD, &__id); \
                      std::cout << "proc "<< __id <<": " << x << std::endl;}
