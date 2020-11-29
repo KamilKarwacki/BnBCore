@@ -39,50 +39,39 @@ void MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute
         //master processor
         Subproblem_Params initialProblem = Problem_Def.GetInitialSubproblem(prob);
 
-        bool is_idle[num+1];
-        int num_idle;
-        for(int i=1;i<num;i++){
-            is_idle[i] = true; // mark all as idle
+        // stores idleProcIds;
+        std::vector<int> idleProcIds;
+        for(int i=2;i<num;i++){
+            idleProcIds.push_back(i);
         }
-        num_idle = num - 1;
         //encode initial problem and empty sol into buffer
         encoder.Encode_Solution(sendstream, initialProblem);
         sendstream << BestSolution << " ";
         //send it to idle processor no. 1
         MPI_Send(sendstream.str().c_str(),strlen(sendstream.str().c_str()), MPI_CHAR, 1, MessageType::PROB, MPI_COMM_WORLD);
-        // sendstream.flush(); TODO needed?
-        is_idle[1] = false;
-        num_idle--;
-        while(num_idle < num - 1){
+        while(idleProcIds.size() != num - 1){ //NumOfIdleProcs < num - 1) {  //num_idle < num - 1){
             MPI_Recv(buffer, 2000,MPI_CHAR, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
             receivstream.str(buffer);
             if(st.MPI_TAG == (int)MessageType::GET_SLAVES){
                 int sl_needed;
                 int r = st.MPI_SOURCE;
                 receivstream >> sl_needed;
-                int sl_given = std::min(sl_needed, num_idle);
+                int sl_given = std::min(sl_needed, (int)idleProcIds.size());//)num_idle);
                 sendstream.str("");
                 sendstream << sl_given << " ";
-                int i = 1;
-                while(sl_given){
-                    if(!is_idle[i])
-                        i++;
-                    else{
-                        sendstream << i << " ";
-                        is_idle[i] = false;
-                        num_idle--;
-                        sl_given--;
-                    }
-                }
+
+                std::for_each(idleProcIds.begin(), idleProcIds.begin() + sl_given,
+                        [&sendstream](const int& el){sendstream << el << " ";});
+
                 printProc("sending data to slave " << r << "message content: " << std::endl << sendstream.str())
                 MPI_Send(&sendstream.str()[0],strlen(sendstream.str().c_str())+1,MPI_CHAR,r,MessageType::GET_SLAVES,MPI_COMM_WORLD);
-                sendstream.str("");
+
+                idleProcIds.erase(idleProcIds.begin(), idleProcIds.begin() + sl_given);
             }
             else if(st.MPI_TAG == (int)MessageType::IDLE){
                 printProc("setting proc as idle")
                 //slave has become idle
-                num_idle++;
-                is_idle[st.MPI_SOURCE] = true;
+                idleProcIds.push_back(st.MPI_SOURCE);
             }
             else if(st.MPI_TAG == MessageType::DONE){
                 printProc("got a feasible solution")
@@ -130,7 +119,6 @@ void MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute
                         continue;
                     }
                     if(Problem_Def.IsFeasible(prob, sol)){
-                        printProc("found a feasible solution")
                         sendstream.str("");
                         encoder.Encode_Solution(sendstream, sol);
                         printProc("decoded sol");
