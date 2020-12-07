@@ -40,18 +40,20 @@ namespace BnB
 }
 
 // holds the functions that will perform actions on the subproblems
-template<typename Prob_Consts, typename Subproblem_Params>
+template<typename Problem_Consts, typename Subproblem_Params>
 class Problem_Definition
 {
 public:
     // get the initial sub-problem
-    std::function<Subproblem_Params               (const Prob_Consts& prob)> GetInitialSubproblem = nullptr;
+    std::function<Subproblem_Params               (const Problem_Consts&)> GetInitialSubproblem = nullptr;
     // takes a sub-problem and splits it up further
-    std::function<std::vector<Subproblem_Params>  (const Prob_Consts& consts, const Subproblem_Params& params)> SplitSolution = nullptr;
+    std::function<std::vector<Subproblem_Params>  (const Problem_Consts&, const Subproblem_Params&)> SplitSolution = nullptr;
     // says whether a solution is precise enough
-    std::function<bool                            (const Prob_Consts& consts, const Subproblem_Params& params)> IsFeasible = nullptr;
+    std::function<bool                            (const Problem_Consts&, const Subproblem_Params&)> IsFeasible = nullptr;
     // the branch and bound algorithm needs a method that can calculate a Bound otherwise we will split and never discard
-    std::function<std::variant<int, float, double>(const Prob_Consts& consts, const Subproblem_Params& params)> GetBound = nullptr;
+    std::function<std::variant<int, float, double>(const Problem_Consts&, const Subproblem_Params&)> GetBound = nullptr;
+    // takes a sub problem and lower bound and decides if the subproblem needs to be discarded
+    std::function<bool                            (const Problem_Consts&, const Subproblem_Params&, const std::variant<int, float, double>)> Discard = nullptr;
     // trivial function to display the solution
     std::function<void                            (const Subproblem_Params& params)> PrintSolution = nullptr;
 };

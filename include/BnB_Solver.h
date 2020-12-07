@@ -1,7 +1,7 @@
 #pragma once
 #include "MPI_Message_Encoder.h"
-#include "MPI_Scheduler.h"
 #include "MPI_Scheduler_Default.h"
+#include "MPI_Scheduler_Priority.h"
 #include "Base.h"
 
 enum class Scheduler_Type
@@ -60,8 +60,8 @@ void Solver<Problem_Consts, Subproblem_Params, Domain_Type>::SetScheduler(Schedu
     {
         scheduler = std::make_unique<MPI_Scheduler_Default<Problem_Consts, Subproblem_Params, Domain_Type>>();
     }
-    if(type == Scheduler_Type::PRIORITY)
+    else if(type == Scheduler_Type::PRIORITY)
     {
-
+        scheduler = std::make_unique<MPI_Scheduler_Priority<Problem_Consts, Subproblem_Params, Domain_Type>>();
     }
 }

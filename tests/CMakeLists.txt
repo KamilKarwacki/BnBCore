@@ -5,7 +5,7 @@ macro(package_add_test TESTNAME)
 	add_executable(${TESTNAME} ${ARGN})
 	# link the Google test infrastructure, mocking library, and a default main fuction to
 	# the test executable.  Remove g_test_main if writing your own main function.
-	target_link_libraries(${TESTNAME} gtest gmock gtest_main)
+	target_link_libraries(${TESTNAME} gtest gmock gtest_main BranchNBound)
 	# gtest_discover_tests replaces gtest_add_tests,
 	# see https://cmake.org/cmake/help/v3.10/module/GoogleTest.html for more options to pass to it
 	gtest_discover_tests(${TESTNAME}
@@ -19,4 +19,5 @@ endmacro()
 
 add_subdirectory("${PROJECT_SOURCE_DIR}/extern/googletest" "extern/googletest")
 package_add_test(EncoderTest EncoderTests.cpp)
+package_add_test(OpenMPTest  OpenMPKnapsackTest.cpp)
 

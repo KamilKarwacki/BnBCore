@@ -5,8 +5,8 @@ project("BranchNBound" LANGUAGES CXX)
 option(BUILD_WITH_OMP 
 		"Whether to build with MPI (to run on a cluster)" ON)
 option(BUILD_WITH_MPI 
-		"Whether to build with OMP (to run in parallel on a single machine)" OFF)
-option(PACKAGE_TESTING "Build the tests" OFF)
+		"Whether to build with OMP (to run in parallel on a single machine)" ON)
+option(PACKAGE_TESTING "Build the tests" ON)
 
 # our only target, a header only library (INTERFACE)
 add_library("${PROJECT_NAME}" INTERFACE)

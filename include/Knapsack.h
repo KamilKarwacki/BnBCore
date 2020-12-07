@@ -6,6 +6,28 @@
 
 namespace BnB::Knapsack
 {
+    namespace Detail{
+        struct item{
+            int wt, cost;
+            double ratio;
+        };
+
+        bool comp(item a, item b){
+            return a.ratio > b.ratio;
+        }
+
+        std::vector<int> GenerateWeights()
+        {
+            return {2,2,2,2,8};
+        }
+
+        std::vector<int> GenerateCosts()
+        {
+            return {5,5,5,5,100};
+        }
+
+    }
+
     using Consts = Problem_Constants<
             std::vector<int>, // Weights
             std::vector<int>, // Costs
@@ -17,41 +39,23 @@ namespace BnB::Knapsack
             int>;             // cost of config
 
 
-    struct item{
-        int wt, cost;
-        double ratio;
-    };
-
-    bool comp(item a, item b){
-        return a.ratio > b.ratio;
-    }
-
-    std::vector<int> GenerateWeights()
-    {
-        return {1,1,2,1,8};
-    }
-
-    std::vector<int> GenerateCosts()
-    {
-        return {5,5,5,5,100};
-    }
-
     Consts GenerateProblemConstants()
     {
-        // constants will be initialized before solver is run
-        Consts consts;
-        std::get<0>(consts) = GenerateWeights();
-        std::get<1>(consts) = GenerateCosts();
-        std::get<2>(consts) = 10; // max weight
-
-        return consts;
         // NOTE: Params are not needed to be constructed now
         // The initial subproblem will be constructed by Problem_Definition.GetInitialSubproblem()
+        // constants will be initialized before solver is run
+        Consts consts;
+        std::get<0>(consts) = Detail::GenerateWeights();
+        std::get<1>(consts) = Detail::GenerateCosts();
+        std::get<2>(consts) = 1; // max weight
+
+        return consts;
     }
 
 
     Problem_Definition<Consts, Params> GenerateToyProblem()
     {
+        using namespace Detail;
         // object that will hold the functions called by the solver
         Problem_Definition<Consts, Params> KnapsackProblem;
 
@@ -72,7 +76,7 @@ namespace BnB::Knapsack
             return ret;
         };
 
-        KnapsackProblem.GetBound = [](const Consts& consts, const Params & params){
+        KnapsackProblem.Discard = [](const Consts& consts, const Params& params, const std::variant<int, float, double> CurrentBound){
             int w = std::get<1>(params);
             int cost = std::get<2>(params);
             std::vector<int> weights = std::get<0>(consts);
@@ -89,7 +93,33 @@ namespace BnB::Knapsack
 
             int bound = cost;
             std::sort(rem.begin(),rem.end(),comp); // decreasing order of ratio of cost to weight;
-            for(int j=0;j<rem.size() && w <= std::get<2>(consts);j++){
+            for(int j=0;j<rem.size() && w + rem[j].wt <= std::get<2>(consts);j++){
+                //taking items till weight is exceeded
+                bound += rem[j].cost;
+                w += rem[j].wt;
+            }
+
+            return bound < std::get<int>(CurrentBound);
+        };
+
+        KnapsackProblem.GetBound = [](const Consts& consts, const Params& params){
+            int w = std::get<1>(params);
+            int cost = std::get<2>(params);
+            std::vector<int> weights = std::get<0>(consts);
+            std::vector<int> costs = std::get<1>(consts);
+            std::vector<item> rem; // remaining items
+
+            for(int i=std::get<0>(params).size(); i < weights.size(); i++){
+                item it;
+                it.wt = weights[i];
+                it.cost = costs[i];
+                it.ratio = static_cast<double>(it.cost) / static_cast<double>(it.wt);
+                rem.push_back(it);
+            }
+
+            int bound = cost;
+            std::sort(rem.begin(),rem.end(),comp); // decreasing order of ratio of cost to weight;
+            for(int j=0;j<rem.size() && w + rem[j].wt <= std::get<2>(consts);j++){
                 //taking items till weight is exceeded
                 bound += rem[j].cost;
                 w += rem[j].wt;
