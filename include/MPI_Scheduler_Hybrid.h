@@ -3,16 +3,17 @@
 #include "MPI_Scheduler.h"
 
 template<typename Prob_Consts, typename Subproblem_Params, typename Domain_Type>
-class MPI_Scheduler_Priority: public MPI_Scheduler<Prob_Consts, Subproblem_Params, Domain_Type>
+class MPI_Scheduler_Hybrid: public MPI_Scheduler<Prob_Consts, Subproblem_Params, Domain_Type>
 {
 public:
     enum MessageType{PROB = 0, GET_SLAVES = 1, DONE = 2, IDLE = 3, FINISH = 4};
 
     struct comparator{
-       bool operator()(const Subproblem_Params& p1, const Subproblem_Params& p2){
-           return std::get<0>(p1) < std::get<0>(p2);
-       }
+        bool operator()(const Subproblem_Params& p1, const Subproblem_Params& p2){
+            return std::get<0>(p1) < std::get<0>(p2);
+        }
     };
+
 
     void Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
                  const Prob_Consts& prob,
@@ -24,11 +25,11 @@ public:
 
 
 template<typename Prob_Consts, typename Subproblem_Params, typename Domain_Type>
-void MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
-                                                                                 const Prob_Consts& prob,
-                                                                                 const MPI_Message_Encoder<Subproblem_Params>& encoder,
-                                                                                 const Goal goal,
-                                                                                 const Domain_Type WorstBound)
+void MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
+                                                                                  const Prob_Consts& prob,
+                                                                                  const MPI_Message_Encoder<Subproblem_Params>& encoder,
+                                                                                  const Goal goal,
+                                                                                  const Domain_Type WorstBound)
 {
     MPI_Init(0,NULL);
     int pid, num;
@@ -77,7 +78,6 @@ void MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_Type>::Execut
                 MPI_Send(&sendstream.str()[0],strlen(sendstream.str().c_str())+1,MPI_CHAR,r,MessageType::GET_SLAVES,MPI_COMM_WORLD);
 
                 idleProcIds.erase(idleProcIds.begin(), idleProcIds.begin() + sl_given);
-
             }
             else if(st.MPI_TAG == MessageType::IDLE){
                 //slave has become idle
@@ -109,7 +109,6 @@ void MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_Type>::Execut
         std::priority_queue<Subproblem_Params, std::vector<Subproblem_Params>, comparator> LocalTaskQueue;
         Domain_Type LocalBestBound = WorstBound;
         char req[2000];
-
         int counter = 0;
 
         while(true){
@@ -121,63 +120,83 @@ void MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_Type>::Execut
                 Subproblem_Params Received_Params;
                 encoder.Decode_Solution(receivstream, Received_Params);
                 LocalTaskQueue.push(Received_Params);
-
-                while(!LocalTaskQueue.empty()){
-                    //take out one element from queue, expand it
-                    Subproblem_Params sol = LocalTaskQueue.top(); LocalTaskQueue.pop();
-
-                    //ignore if its bound is worse than already known best sol.
-                    if(Problem_Def.Discard(prob, sol, LocalBestBound))
-                        continue;
-
-                    // try to make the bound better
-                    auto CandidateBound = std::get<Domain_Type>(Problem_Def.GetBound(prob, sol));
-                    if(((bool)goal && CandidateBound > LocalBestBound)
-                       || (!(bool)goal && CandidateBound < LocalBestBound)){
-                        LocalBestBound = CandidateBound;
-                    }
-
-                    // check if we cant divide further
-                    if(Problem_Def.IsFeasible(prob, sol)){
-                        sendstream.str("");
-                        encoder.Encode_Solution(sendstream, sol);
-                        sendstream << LocalBestBound << " ";
-                        //tell master that feasible solution is reached
-                        MPI_Send(&sendstream.str()[0],strlen(sendstream.str().c_str())+1, MPI_CHAR,0,MessageType::DONE, MPI_COMM_WORLD);
-                        continue;
-                    }
-                    std::vector<Subproblem_Params> v = Problem_Def.SplitSolution(prob, sol);
-
-                    for(const auto& el : v)
-                        LocalTaskQueue.push(el);
-
-                    //request master for slaves
-                    if(counter % Communication_Frequency == 0)
-                    {
-                        sendstream.str("");
-                        sendstream << (int)LocalTaskQueue.size() << " ";
-                        MPI_Send(&sendstream.str()[0],strlen(sendstream.str().c_str()),MPI_CHAR,0,MessageType::GET_SLAVES,MPI_COMM_WORLD);
-
-                        //get master's response
-                        MPI_Recv(buffer,200, MPI_CHAR, 0, MessageType::GET_SLAVES, MPI_COMM_WORLD, &st);
-                        receivstream.str(buffer);
-                        int slaves_avbl;
-                        receivstream >> slaves_avbl;
-
-                        for(int i=0; i<slaves_avbl; i++){
-                            //give a problem to each slave
-                            int sl_no;
-                            receivstream >> sl_no;
-                            sendstream.str("");
-                            Subproblem_Params SubProb = LocalTaskQueue.top();
-                            LocalTaskQueue.pop();
-                            encoder.Encode_Solution(sendstream, SubProb);
-                            sendstream << LocalBestBound<< " ";
-                            //send it to idle processor
-                            MPI_Send(&sendstream.str()[0],strlen(sendstream.str().c_str()),MPI_CHAR,sl_no,MessageType::PROB,MPI_COMM_WORLD);
+                #pragma omp parallel num_threads(4) private(sendstream, receivstream)
+                {
+                    while(!LocalTaskQueue.empty()){
+                        //take out one element from queue, expand it
+                        Subproblem_Params sol;
+                        #pragma omp critical (queuelock)
+                        {
+                            sol = LocalTaskQueue.top(); LocalTaskQueue.pop();
                         }
+
+                        //ignore if its bound is worse than already known best sol.
+                        if(Problem_Def.Discard(prob, sol, LocalBestBound))
+                            continue;
+
+                        // try to make the bound better
+                        auto CandidateBound = std::get<Domain_Type>(Problem_Def.GetBound(prob, sol));
+                        if(((bool)goal && CandidateBound > LocalBestBound)
+                           || (!(bool)goal && CandidateBound < LocalBestBound)){
+                            #pragma omp critical///!!!!!!!!!!!!!!!!!!!!! WHY DOESNT ATOMIC WORK!!!!!!!!!!!!!!!!!!
+                            {
+                                LocalBestBound = CandidateBound;
+                            }
+                        }
+
+                        // check if we cant divide further
+                        if(Problem_Def.IsFeasible(prob, sol)){
+                            sendstream.str("");
+                            encoder.Encode_Solution(sendstream, sol);
+                            sendstream << LocalBestBound << " ";
+                            //tell master that feasible solution is reached
+                            MPI_Send(&sendstream.str()[0],strlen(sendstream.str().c_str())+1, MPI_CHAR,0,MessageType::DONE, MPI_COMM_WORLD);
+                            continue;
+                        }
+                        std::vector<Subproblem_Params> v = Problem_Def.SplitSolution(prob, sol);
+
+                        for(const auto& el : v){
+                        #pragma omp critical (queuelock)
+                        {
+                            LocalTaskQueue.push(el);
+                        }}
+
+                        if(counter % Communication_Frequency == 0) // we did enough computations in omp mode now share some work
+                        {
+                            #pragma omp single nowait
+                            {//request master for slaves
+                            sendstream.str("");
+                            sendstream << (int)LocalTaskQueue.size() << " ";
+                            MPI_Send(&sendstream.str()[0],strlen(sendstream.str().c_str()),MPI_CHAR,0,MessageType::GET_SLAVES,MPI_COMM_WORLD);
+
+                            //get master's response
+                            MPI_Recv(buffer,200, MPI_CHAR, 0, MessageType::GET_SLAVES, MPI_COMM_WORLD, &st);
+                            receivstream.str(buffer);
+                            int slaves_avbl;
+                            receivstream >> slaves_avbl;
+
+                            for(int i=0; i<slaves_avbl; i++){
+                                //give a problem to each slave
+                                if(LocalTaskQueue.empty()){
+                                    Subproblem_Params SubProb;
+                                    #pragma omp critical (queuelock) // might need to be outside of if statement
+                                    {
+                                        SubProb = LocalTaskQueue.top(); LocalTaskQueue.pop();
+                                    }
+                                    int sl_no;
+                                    receivstream >> sl_no;
+                                    sendstream.str("");
+                                    encoder.Encode_Solution(sendstream, SubProb);
+                                    sendstream << LocalBestBound<< " ";
+                                    //send it to idle processor
+                                    MPI_Send(&sendstream.str()[0],strlen(sendstream.str().c_str()), MPI_CHAR, sl_no, MessageType::PROB, MPI_COMM_WORLD);
+                                }
+                            }}
+                        }
+                        #pragma omp atomic
+                        counter++;
                     }
-                    counter++;
+
                 }
                 //This slave has now become idle (its queue is empty). Inform master.
                 sendstream.str("");

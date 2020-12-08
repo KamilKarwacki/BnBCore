@@ -36,7 +36,7 @@ namespace BnB
     using Problem_Constants = std::tuple<Args...>;
     // params define a subproblem and will be communicated
     template<typename... Args>
-    using Subproblem_Parameters = std::tuple<Args...>; //subproblem parameters
+    using Subproblem_Parameters = std::tuple<Args...>;
 }
 
 // holds the functions that will perform actions on the subproblems

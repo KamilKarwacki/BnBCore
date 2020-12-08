@@ -11,5 +11,11 @@ public:
     virtual void Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
                          const Prob_Consts& prob,
                          const MPI_Message_Encoder<Subproblem_Params>& encoder,
-                         const Goal goal) = 0;
+                         const Goal goal,
+                         const Domain_Type WorstBound) = 0;
+
+    void SetCommFrequency(int num){Communication_Frequency = num;}
+
+private:
+    int Communication_Frequency = 10;
 };

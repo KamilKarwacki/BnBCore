@@ -12,5 +12,5 @@ public:
                         const Problem_Definition<Problem_Consts, Subproblem_Params>& Problem_Def,
                         const Problem_Consts& prob,
                         const Goal goal,
-                        Domain_Type WorstBound) = 0;
+                        const Domain_Type WorstBound) = 0;
 };
