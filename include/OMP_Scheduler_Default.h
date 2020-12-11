@@ -7,20 +7,27 @@ template<typename Problem_Consts, typename Subproblem_Params, typename Domain_Ty
 class OMP_Scheduler_Default : public OMP_Scheduler<Problem_Consts, Subproblem_Params, Domain_Type>
 {
 public:
-    virtual Subproblem_Params Execute(
-                         const Problem_Definition<Problem_Consts, Subproblem_Params>& Problem_Def,
-                         const Problem_Consts& prob,
-                         const Goal goal,
-                         Domain_Type BestBound);
+    Subproblem_Params Execute(
+            const Problem_Definition<Problem_Consts, Subproblem_Params>& Problem_Def,
+            const Problem_Consts& prob,
+            const Goal goal,
+            Domain_Type BestBound) override;
 
+    void DoTask(
+            const Problem_Definition<Problem_Consts, Subproblem_Params>& Problem_Def,
+            const Problem_Consts& prob,
+            const Goal goal,
+            Subproblem_Params& BestSubproblem,
+            Domain_Type& BestBound,
+            const Subproblem_Params& subpr);
 };
 
 
 
-template<typename Prob_Consts, typename Subproblem_Params, typename Domain_Type>
-void PushTask(
-        const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
-        const Prob_Consts& prob,
+template<typename Problem_Consts, typename Subproblem_Params, typename Domain_Type>
+void OMP_Scheduler_Default<Problem_Consts, Subproblem_Params, Domain_Type>::DoTask(
+        const Problem_Definition<Problem_Consts, Subproblem_Params>& Problem_Def,
+        const Problem_Consts& prob,
         const Goal goal,
         Subproblem_Params& BestSubproblem,
         Domain_Type& BestBound,
@@ -45,11 +52,12 @@ void PushTask(
     if(!Problem_Def.IsFeasible(prob, subpr))
     {
         std::vector<Subproblem_Params> result = Problem_Def.SplitSolution(prob, subpr);
-        for(auto& r : result)
+        for(const auto& r : result)
         {
-#pragma omp task firstprivate(r) shared(BestSubproblem, BestBound)
+            //int prio = std::get<0>(r);
+            #pragma omp task firstprivate(r) shared(BestSubproblem, BestBound)
             {
-                PushTask(Problem_Def, prob, goal, BestSubproblem, BestBound, r);
+                DoTask(Problem_Def, prob, goal, BestSubproblem, BestBound, r);
             }
         }
     }
@@ -74,7 +82,7 @@ Subproblem_Params OMP_Scheduler_Default<Problem_Consts, Subproblem_Params, Domai
         {
 #pragma omp task
             {
-                PushTask(Problem_Def, prob, goal, BestSubproblem, BestBound, initial);
+                DoTask(Problem_Def, prob, goal, BestSubproblem, BestBound, initial);
             }
         }
 #pragma omp taskwait

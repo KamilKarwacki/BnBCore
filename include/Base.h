@@ -15,16 +15,22 @@
 #include "mpi.h"
 #include "omp.h"
 
-#define OMP_LOGGING 1
-#define MPI_LOGGING 1
+#define    OMP_LOGGING 0
+#define    MPI_LOGGING 0
+#define HYBRID_LOGGING 1
 
-#if __MPI
+#if MPI_LOGGING
 #define printProc(x) {int __id; \
                      MPI_Comm_rank(MPI_COMM_WORLD, &__id); \
                      std::cout << "proc "<< __id <<": " << x << std::endl;}
 #endif
 #if OMP_LOGGING
-#define printProc(x)  { std::cout << "proc "<< omp_get_thread_num() <<": " << x << std::endl;}
+#define printProc(x)  { std::cout << "proc (omp) "<< omp_get_thread_num() <<": " << x << std::endl;}
+#endif
+#if HYBRID_LOGGING
+#define printProc(x) {int __id; \
+                     MPI_Comm_rank(MPI_COMM_WORLD, &__id); \
+                     std::cout << "proc "<< __id << "("<<omp_get_thread_num() << ")"  << ": " << x << std::endl;}
 #endif
 
 namespace BnB

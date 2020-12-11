@@ -152,7 +152,7 @@ void MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_Type>::Execut
                         LocalTaskQueue.push(el);
 
                     //request master for slaves
-                    if(counter % Communication_Frequency == 0)
+                    if(counter % this->Communication_Frequency == 0)
                     {
                         sendstream.str("");
                         sendstream << (int)LocalTaskQueue.size() << " ";

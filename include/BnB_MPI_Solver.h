@@ -24,6 +24,7 @@ public:
     // if not called default scheduler will be used
     void SetScheduler(Scheduler_Type);
     // set frequency of worker to master communication
+    auto SetSchedulerParameters() {return (scheduler.get());}
 
 private:
 
@@ -68,6 +69,4 @@ void Solver_MPI<Problem_Consts, Subproblem_Params, Domain_Type>::SetScheduler(Sc
             scheduler = std::make_unique<MPI_Scheduler_Hybrid<Problem_Consts, Subproblem_Params, Domain_Type>>();
             break;
     }
-
-
 }

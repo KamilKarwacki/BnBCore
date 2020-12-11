@@ -86,7 +86,6 @@ void MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute
                 receivstream >> CandidateBound;
                 printProc("received solution with bound: " << CandidateBound << " while best Bound is " << GlobalBestBound);
 
-
                 if(((bool)goal && CandidateBound > GlobalBestBound) ||
                   (!(bool)goal && CandidateBound < GlobalBestBound) ){ // optimize with template specialization
                     BestSubproblem  = Received_Solution;

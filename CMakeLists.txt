@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION "3.15.2")
 project("BranchNBound" LANGUAGES CXX)
 
-# setting variables which will controll how to build 
+# setting variables which will control how to build
 option(BUILD_WITH_OMP 
 		"Whether to build with MPI (to run on a cluster)" ON)
 option(BUILD_WITH_MPI 

@@ -14,8 +14,8 @@ public:
                          const Goal goal,
                          const Domain_Type WorstBound) = 0;
 
-    void SetCommFrequency(int num){Communication_Frequency = num;}
+    void CommFrequency(int num){Communication_Frequency = num;}
 
-private:
+protected:
     int Communication_Frequency = 10;
 };
