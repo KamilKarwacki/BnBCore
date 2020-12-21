@@ -33,8 +33,6 @@ if(PACKAGE_TESTING)
 endif()
 # ------------------------------------
 
-#target_include_directories("${PROJECT_NAME}" INTERFACE include/)
-
 target_include_directories(
 		${PROJECT_NAME}
 		INTERFACE $<BUILD_INTERFACE:${${PROJECT_NAME}_SOURCE_DIR}/include>

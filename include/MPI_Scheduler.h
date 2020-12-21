@@ -15,7 +15,11 @@ public:
                          const Domain_Type WorstBound) = 0;
 
     void CommFrequency(int num){Communication_Frequency = num;}
+    void Threads(size_t num) {OpenMPThreads = num;}
 
 protected:
-    int Communication_Frequency = 10;
+    int Communication_Frequency = 1;
+
+    // only for Hybrid
+    int OpenMPThreads = 1;
 };

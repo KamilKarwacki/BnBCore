@@ -80,6 +80,7 @@ void decodeParam(std::stringstream& ss, double &p)
     ss >> p;
 }
 
+
 template<>
 void encodeParam(std::stringstream& ss, const std::vector<int>& p)
 {

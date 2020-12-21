@@ -24,7 +24,7 @@ public:
     // if not called default scheduler will be used
     void SetScheduler(Scheduler_Type);
     // set frequency of worker to master communication
-    auto SetSchedulerParameters() {return (scheduler.get());}
+    auto SetSchedulerParameters() {return scheduler.get();}
 
 private:
 
