@@ -3,14 +3,10 @@
 #include "MPI_Scheduler_Default.h"
 #include "MPI_Scheduler_Priority.h"
 #include "MPI_Scheduler_Hybrid.h"
+#include "MPI_Scheduler_OneSided.h"
 #include "Base.h"
 
-enum class Scheduler_Type
-{
-    DEFAULT,
-    PRIORITY,
-    HYBRID,
-};
+enum class Scheduler_Type{ DEFAULT, PRIORITY, HYBRID, ONESIDED,};
 
 
 template<typename Problem_Consts, typename Subproblem_Params, typename Domain_Type>
@@ -67,6 +63,9 @@ void Solver_MPI<Problem_Consts, Subproblem_Params, Domain_Type>::SetScheduler(Sc
             break;
         case Scheduler_Type::HYBRID:
             scheduler = std::make_unique<MPI_Scheduler_Hybrid<Problem_Consts, Subproblem_Params, Domain_Type>>();
+            break;
+        case Scheduler_Type::ONESIDED:
+            scheduler = std::make_unique<MPI_Scheduler_OneSided<Problem_Consts, Subproblem_Params, Domain_Type>>();
             break;
     }
 }

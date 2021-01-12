@@ -87,7 +87,7 @@ void encodeParam(std::stringstream& ss, const std::vector<int>& p)
     size_t len = p.size();
     ss << len << " ";
 
-    for(int i = 0; i < len; i++)
+    for(size_t i = 0; i < len; i++)
     {
         ss << p[i] << " ";
     }
@@ -100,7 +100,7 @@ void decodeParam(std::stringstream& ss, std::vector<int>& p)
     ss >> len;
     p.resize(len);
 
-    for(int i = 0; i < len; i++)
+    for(size_t i = 0; i < len; i++)
     {
         ss >> p[i];
     }

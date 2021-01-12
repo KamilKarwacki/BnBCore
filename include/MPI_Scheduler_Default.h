@@ -189,11 +189,11 @@ void MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute
                     for(const auto& el : v)
                         task_queue.push(el);
 					//for(typename std::vector<Subproblem_Params>::reverse_iterator i = v.rbegin();
-				//			     i != v.rend(); ++i ) {
-				//		task_queue.push(*i);
-				//	}
+					//		     i != v.rend(); ++i ) {
+					//	task_queue.push(*i);
+					//}
 
-                    //request master for slaves
+                    //request master for slaves and exchange bound
                     sendstream.str("");
                     sendstream << LocalBestBound << " ";
                     sendstream << (int)task_queue.size() << " ";

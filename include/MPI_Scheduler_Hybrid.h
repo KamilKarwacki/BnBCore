@@ -31,8 +31,6 @@ void MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(
                                                                                   const Goal goal,
                                                                                   const Domain_Type WorstBound)
 {
-    int provided;
-    MPI_Init_thread(0,NULL, MPI_THREAD_SERIALIZED, &provided);
     int pid, num;
     MPI_Comm_rank(MPI_COMM_WORLD, &pid);
     MPI_Comm_size(MPI_COMM_WORLD, &num);
@@ -46,6 +44,7 @@ void MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(
     char buffer[2000];
 
     if(pid == 0){
+        printProc("we are running with embedded " << this->OpenMPThreads);
         // local Variables of master
         Subproblem_Params BestSubproblem;
         Domain_Type GlobalBestBound = WorstBound;
@@ -238,5 +237,4 @@ void MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(
             }
         }
     }
-    MPI_Finalize();
 }
