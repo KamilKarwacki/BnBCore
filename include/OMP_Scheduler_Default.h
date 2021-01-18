@@ -33,23 +33,32 @@ void OMP_Scheduler_Default<Problem_Consts, Subproblem_Params, Domain_Type>::DoTa
         Domain_Type& BestBound,
         const Subproblem_Params& subpr)
 {
-    // try to discard
+    // reasons to discard: our lower bound for the minimum is bigger than the current best UpperBound
     if(Problem_Def.Discard(prob, subpr, BestBound))
         return;
 
-    // try to set new bound
-    Domain_Type newBound = std::get<Domain_Type>(Problem_Def.GetBound(prob, subpr));
-    if(((bool)goal && (newBound >= BestBound))
-    || (!(bool)goal && (newBound <= BestBound))){
-#pragma omp critical
-        {
-            BestBound = newBound;
-            BestSubproblem = subpr;
+    switch(Problem_Def.IsFeasible(prob,subpr)){
+        case BnB::FEASIBILITY::FULL: {
+            // try to set new bound
+            Domain_Type newBound = std::get<Domain_Type>(Problem_Def.GetBound(prob, subpr));
+            if (((bool) goal && (newBound >= BestBound))
+                || (!(bool) goal && (newBound <= BestBound))) {
+                #pragma omp critical
+                {
+                    BestBound = newBound;
+                    BestSubproblem = subpr;
+                }
+            }
+            break;
         }
+        case BnB::FEASIBILITY::PARTIAL:
+            break;
+        case BnB::FEASIBILITY::NONE: // skip this problem
+            return;
     }
 
-    // if not small/far enough, split further
-    if(!Problem_Def.IsFeasible(prob, subpr))
+
+    if(Problem_Def.IsBranchable(prob, subpr))
     {
         std::vector<Subproblem_Params> result = Problem_Def.SplitSolution(prob, subpr);
         for(const auto& r : result)
@@ -88,7 +97,6 @@ Subproblem_Params OMP_Scheduler_Default<Problem_Consts, Subproblem_Params, Domai
 #pragma omp taskwait
     }
     Problem_Def.PrintSolution(BestSubproblem);
-    std::cout << BestBound << std::endl;
     return BestSubproblem;
 }
 

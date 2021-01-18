@@ -163,7 +163,7 @@ void MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_Type>::Execut
                     }
 
                     // check if we cant divide further
-                    if(Problem_Def.IsFeasible(prob, sol) and SendToMaster){
+                    if(Problem_Def.IsBranchable(prob, sol) and SendToMaster){
                         sendstream.str("");
                         encoder.Encode_Solution(sendstream, sol);
                         sendstream << LocalBestBound << " ";

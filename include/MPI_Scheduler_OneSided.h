@@ -38,6 +38,7 @@ void MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_Type>::Execut
                                                                                   const Goal goal,
                                                                                   const Domain_Type WorstBound)
 {
+    /*
     int pid, num;
     MPI_Comm_rank(MPI_COMM_WORLD, &pid);
     MPI_Comm_size(MPI_COMM_WORLD, &num);
@@ -161,7 +162,7 @@ void MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_Type>::Execut
                     }
 
                     // check if we cant divide further
-                    if(Problem_Def.IsFeasible(prob, sol) and SendToMaster){
+                    if(Problem_Def.IsBranchable(prob, sol) and SendToMaster){
                         sendstream.str("");
                         encoder.Encode_Solution(sendstream, sol);
                         sendstream << LocalBestBound << " ";
@@ -169,6 +170,7 @@ void MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_Type>::Execut
                         MPI_Send(&sendstream.str()[0],strlen(sendstream.str().c_str())+1, MPI_CHAR,0,MessageType::DONE, MPI_COMM_WORLD);
                         continue;
                     }
+
                     std::vector<Subproblem_Params> v = Problem_Def.SplitSolution(prob, sol);
 
                     for(const auto& el : v)
@@ -204,4 +206,5 @@ void MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_Type>::Execut
 
         }
     }
+     */
 }

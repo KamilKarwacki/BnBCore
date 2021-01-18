@@ -69,6 +69,8 @@ void MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute
     char buffer[2000];
 
     if(pid == 0){
+        int NumMessages = 0;
+        printProc("the domain is " << std::get<0>(prob).size() << " dimensional and the domain is " << std::get<0>(prob)[0]);
 
         Subproblem_Params BestSubproblem;
         Domain_Type GlobalBestBound = WorstBound;
@@ -87,6 +89,7 @@ void MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute
         MPI_Send(sendstream.str().c_str(),strlen(sendstream.str().c_str()), MPI_CHAR, 1, MessageType::PROB, MPI_COMM_WORLD);
         while(idleProcIds.size() != num - 1){
             MPI_Recv(buffer, 2000,MPI_CHAR, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
+            NumMessages++;
             receivstream.str(buffer);
             if(st.MPI_TAG == MessageType::GET_SLAVES){
                 int sl_needed;
@@ -99,6 +102,7 @@ void MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute
                    (!(bool)goal && CandidateBound < GlobalBestBound) ){ // optimize with template specialization
                     GlobalBestBound = CandidateBound;
                 }
+
 
                 receivstream >> sl_needed;
                 int sl_given = std::min(sl_needed, (int)idleProcIds.size());;
@@ -123,10 +127,10 @@ void MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute
                 encoder.Decode_Solution(receivstream, Received_Solution);
                 Domain_Type CandidateBound;
                 receivstream >> CandidateBound;
-                printProc("received solution with bound: " << std::setprecision(8) << CandidateBound << " while best Bound is "<< std::setprecision(8) << GlobalBestBound);
+                //printProc("received solution with bound: " << std::setprecision(8) << CandidateBound << " while best Bound is "<< std::setprecision(8) << GlobalBestBound);
 
-                if(((bool)goal && CandidateBound > GlobalBestBound) ||
-                  (!(bool)goal && CandidateBound < GlobalBestBound) ){ // optimize with template specialization
+                if(((bool)goal && CandidateBound >= GlobalBestBound) ||
+                  (!(bool)goal && CandidateBound <= GlobalBestBound) ){ // optimize with template specialization
                     BestSubproblem  = Received_Solution;
                     GlobalBestBound = CandidateBound;
                 }
@@ -136,6 +140,7 @@ void MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute
         for(int i=1;i<num;i++){
             MPI_Send(buffer, 1, MPI_CHAR, i, MessageType::FINISH, MPI_COMM_WORLD);
         }
+        printProc("the master received a total of " << NumMessages << " messages");
         Problem_Def.PrintSolution(BestSubproblem);
     }
     else{
@@ -166,17 +171,34 @@ void MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute
                     if(Problem_Def.Discard(prob, sol, LocalBestBound))
                         continue;
 
-                    // try to make the bound better
+                    // try to make the bound better only if the solution lies in a feasible domain
                     bool SendToMaster = false;
-                    auto CandidateBound = std::get<Domain_Type>(Problem_Def.GetBound(prob, sol));
-                    if(((bool)goal && CandidateBound > LocalBestBound)
-                        || (!(bool)goal && CandidateBound < LocalBestBound)){
-                        LocalBestBound = CandidateBound;
-                        SendToMaster = true;
-                    }
+                    auto Feasibility = Problem_Def.IsFeasible(prob, sol);
+                    if(Feasibility == BnB::FEASIBILITY::FULL)
+                    {
+                        auto CandidateBound = std::get<Domain_Type>(Problem_Def.GetBound(prob, sol));
+                        if(((bool)goal && CandidateBound >= LocalBestBound)
+                           || (!(bool)goal && CandidateBound <= LocalBestBound)){
+                            LocalBestBound = CandidateBound;
+                            SendToMaster = true;
+                        }
+                    }else if(Feasibility == BnB::FEASIBILITY::NONE) // basically discard again
+                        continue;
 
-                    // check if we cant divide further
-                    if(Problem_Def.IsFeasible(prob, sol) and SendToMaster){
+                    std::vector<Subproblem_Params> v;
+                    if(Problem_Def.IsBranchable(prob, sol)){ // if we can branch we do it
+                        v = Problem_Def.SplitSolution(prob, sol);
+                        for(const auto& el : v)
+                            task_queue.push(el);
+
+                        //for(typename std::vector<Subproblem_Params>::reverse_iterator i = v.rbegin();
+                        //		     i != v.rend(); ++i ) {
+                        //	task_queue.push(*i);
+                        //}
+
+                    }
+                    else if (SendToMaster) // if we cant and we have a good solution we send it to master
+                    {
                         sendstream.str("");
                         encoder.Encode_Solution(sendstream, sol);
                         sendstream << LocalBestBound << " ";
@@ -184,41 +206,37 @@ void MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute
                         MPI_Send(&sendstream.str()[0],strlen(sendstream.str().c_str())+1, MPI_CHAR,0,MessageType::DONE, MPI_COMM_WORLD);
                         continue;
                     }
-                    std::vector<Subproblem_Params> v = Problem_Def.SplitSolution(prob, sol);
-
-                    for(const auto& el : v)
-                        task_queue.push(el);
-					//for(typename std::vector<Subproblem_Params>::reverse_iterator i = v.rbegin();
-					//		     i != v.rend(); ++i ) {
-					//	task_queue.push(*i);
-					//}
-
                     //request master for slaves and exchange bound
-                    sendstream.str("");
-                    sendstream << LocalBestBound << " ";
-                    sendstream << (int)task_queue.size() << " ";
-                    MPI_Send(&sendstream.str()[0],strlen(sendstream.str().c_str()),MPI_CHAR,0,MessageType::GET_SLAVES,MPI_COMM_WORLD);
-
-                    //get master's response
-                    MPI_Recv(buffer,200, MPI_CHAR, 0, MessageType::GET_SLAVES, MPI_COMM_WORLD, &st);
-                    receivstream.str(buffer);
-
-                    receivstream >> LocalBestBound;
-                    int slaves_avbl;
-                    receivstream >> slaves_avbl;
-
-                    for(int i=0; i<slaves_avbl; i++){
-                        //give a problem to each slave
-                        int sl_no;
-                        receivstream >> sl_no;
+                    if(task_queue.size() > 1000)
+                    {
                         sendstream.str("");
-                        Subproblem_Params SubProb = task_queue.front();
-                        task_queue.pop();
-                        encoder.Encode_Solution(sendstream, SubProb);
-                        sendstream << LocalBestBound<< " ";
-                        //send it to idle processor
-                        MPI_Send(&sendstream.str()[0],strlen(sendstream.str().c_str()),MPI_CHAR,sl_no,MessageType::PROB,MPI_COMM_WORLD);
+                        sendstream << LocalBestBound << " ";
+                        sendstream << (int)task_queue.size() << " ";
+                        MPI_Send(&sendstream.str()[0],strlen(sendstream.str().c_str()),MPI_CHAR,0,MessageType::GET_SLAVES,MPI_COMM_WORLD);
+
+                        //get master's response
+                        MPI_Recv(buffer,200, MPI_CHAR, 0, MessageType::GET_SLAVES, MPI_COMM_WORLD, &st);
+                        receivstream.str(buffer);
+
+                        receivstream >> LocalBestBound;
+                        int slaves_avbl;
+                        receivstream >> slaves_avbl;
+
+                        for(int i=0; i<slaves_avbl; i++){
+                            //give a problem to each slave
+                            int sl_no;
+                            receivstream >> sl_no;
+                            sendstream.str("");
+                            Subproblem_Params SubProb = task_queue.front();
+                            task_queue.pop();
+                            encoder.Encode_Solution(sendstream, SubProb);
+                            sendstream << LocalBestBound<< " ";
+                            //send it to idle processor
+                            MPI_Send(&sendstream.str()[0],strlen(sendstream.str().c_str()),MPI_CHAR,sl_no,MessageType::PROB,MPI_COMM_WORLD);
+                        }
+
                     }
+
                 }
                 //This slave has now become idle (its queue is empty). Inform master.
                 sendstream.str("");

@@ -43,6 +43,8 @@ namespace BnB
     // params define a subproblem and will be communicated
     template<typename... Args>
     using Subproblem_Parameters = std::tuple<Args...>;
+
+    enum class FEASIBILITY{FULL, PARTIAL, NONE};
 }
 
 // holds the functions that will perform actions on the subproblems
@@ -54,12 +56,14 @@ public:
     std::function<Subproblem_Params               (const Problem_Consts&)> GetInitialSubproblem = nullptr;
     // takes a sub-problem and splits it up further
     std::function<std::vector<Subproblem_Params>  (const Problem_Consts&, const Subproblem_Params&)> SplitSolution = nullptr;
-    // says whether a solution is precise enough
-    std::function<bool                            (const Problem_Consts&, const Subproblem_Params&)> IsFeasible = nullptr;
     // the branch and bound algorithm needs a method that can calculate a Bound otherwise we will split and never discard
     std::function<std::variant<int, float, double>(const Problem_Consts&, const Subproblem_Params&)> GetBound = nullptr;
     // takes a sub problem and lower bound and decides if the subproblem needs to be discarded
     std::function<bool                            (const Problem_Consts&, const Subproblem_Params&, const std::variant<int, float, double>)> Discard = nullptr;
+    // says whether a solution is precise enough
+    std::function<BnB::FEASIBILITY                (const Problem_Consts&, const Subproblem_Params&)> IsFeasible = nullptr;
+    // decides if the subproblem can be split further
+    std::function<bool                            (const Problem_Consts&, const Subproblem_Params&)> IsBranchable = nullptr;
     // trivial function to display the solution
     std::function<void                            (const Subproblem_Params& params)> PrintSolution = nullptr;
 };

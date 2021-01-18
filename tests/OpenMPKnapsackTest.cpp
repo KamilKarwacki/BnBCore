@@ -6,7 +6,7 @@
 
 
 
-TEST(OMPKnapsack1, DemonstratedGTestMacros)
+TEST(OMPKnapsack, someItemsFit)
 {
 	Solver_omp<BnB::Knapsack::Consts, BnB::Knapsack::Params, int> solver;
 	solver.setNumThreads(4);
@@ -17,11 +17,14 @@ TEST(OMPKnapsack1, DemonstratedGTestMacros)
 	std::get<2>(TestConsts) = 10;	
 
 	auto result = solver.Maximize(BnB::Knapsack::GenerateToyProblem(), TestConsts);
+	if(std::get<2>(result) > 30)
+
 	EXPECT_EQ(std::get<2>(result),  30) <<  "Weight does not match";
+	std::cerr << "best cost calculated is " << std::get<2>(result) << " while " << 30 << " was expected" << std::endl;
 }	
 
 
-TEST(OMPKnapsack2, DemonstratedGTestMacros)
+TEST(OMPKnapsack, allItemsFit)
 {
 	Solver_omp<BnB::Knapsack::Consts, BnB::Knapsack::Params, int> solver;
 	solver.setNumThreads(4);
@@ -33,9 +36,10 @@ TEST(OMPKnapsack2, DemonstratedGTestMacros)
 
 	auto result = solver.Maximize(BnB::Knapsack::GenerateToyProblem(), TestConsts);
 	EXPECT_EQ(std::get<2>(result),  36) <<  "Weight does not match";
-}	
+    std::cerr << "best cost calculated is " << std::get<2>(result) << " while " << 30 << " was expected" << std::endl;
+}
 
-TEST(OMPKnapsack3, DemonstratedGTestMacros)
+TEST(OMPKnapsack, NoItemsFit)
 {
 	Solver_omp<BnB::Knapsack::Consts, BnB::Knapsack::Params, int> solver;
 	solver.setNumThreads(4);
@@ -47,7 +51,8 @@ TEST(OMPKnapsack3, DemonstratedGTestMacros)
 
 	auto result = solver.Maximize(BnB::Knapsack::GenerateToyProblem(), TestConsts);
 	EXPECT_EQ(std::get<2>(result), 0) <<  "Weight does not match";
-}	
+    std::cerr << "best cost calculated is " << std::get<2>(result) << " while " << 30 << " was expected" << std::endl;
+}
 
 int main(int argc, char* argv[])
 {
