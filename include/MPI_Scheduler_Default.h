@@ -10,7 +10,7 @@ class MPI_Scheduler_Default : public MPI_Scheduler<Prob_Consts, Subproblem_Param
 public:
     enum MessageType{PROB = 0, GET_SLAVES = 1, DONE = 2, IDLE = 3, FINISH = 4};
 
-    void Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
+    Subproblem_Params Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
                  const Prob_Consts& prob,
                  const MPI_Message_Encoder<Subproblem_Params>& encoder,
                  const Goal goal,
@@ -44,12 +44,16 @@ public:
  *              expand the problem and ask the master for slaves
  *
  */
+//for(typename std::vector<Subproblem_Params>::reverse_iterator i = v.rbegin();
+//		     i != v.rend(); ++i ) {
+//	task_queue.push(*i);
+//}
 
 
 
 
 template<typename Prob_Consts, typename Subproblem_Params, typename Domain_Type>
-void MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
+Subproblem_Params MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
                                                                                  const Prob_Consts& prob,
                                                                                  const MPI_Message_Encoder<Subproblem_Params>& encoder,
                                                                                  const Goal goal,
@@ -142,10 +146,13 @@ void MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute
         }
         printProc("the master received a total of " << NumMessages << " messages");
         Problem_Def.PrintSolution(BestSubproblem);
+        PostProcessSolution(std::vector<Subproblem_Params>());
+        return BestSubproblem;
     }
     else{
         //slave processor
         Domain_Type LocalBestBound = WorstBound;
+        std::vector<Subproblem_Params> Solutions;
         while(true){
             MPI_Recv(buffer,2000, MPI_CHAR, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD,&st);
             receivstream.str(buffer);
@@ -186,16 +193,10 @@ void MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute
                         continue;
 
                     std::vector<Subproblem_Params> v;
-                    if(Problem_Def.IsBranchable(prob, sol)){ // if we can branch we do it
+                    if(Problem_Def.IsBranchable(prob, sol)){ // another criterion to
                         v = Problem_Def.SplitSolution(prob, sol);
                         for(const auto& el : v)
                             task_queue.push(el);
-
-                        //for(typename std::vector<Subproblem_Params>::reverse_iterator i = v.rbegin();
-                        //		     i != v.rend(); ++i ) {
-                        //	task_queue.push(*i);
-                        //}
-
                     }
                     else if (SendToMaster) // if we cant and we have a good solution we send it to master
                     {
@@ -205,9 +206,12 @@ void MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute
                         //tell master that feasible solution is reached
                         MPI_Send(&sendstream.str()[0],strlen(sendstream.str().c_str())+1, MPI_CHAR,0,MessageType::DONE, MPI_COMM_WORLD);
                         continue;
+                    } else{ // because of precision errors we still save it but we dont communicate with the master to save time
+                        Solutions.push_back(sol);
                     }
+
                     //request master for slaves and exchange bound
-                    if(task_queue.size() > 1000)
+                    if(!task_queue.empty()) // maybe set a variable
                     {
                         sendstream.str("");
                         sendstream << LocalBestBound << " ";
@@ -234,9 +238,7 @@ void MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute
                             //send it to idle processor
                             MPI_Send(&sendstream.str()[0],strlen(sendstream.str().c_str()),MPI_CHAR,sl_no,MessageType::PROB,MPI_COMM_WORLD);
                         }
-
                     }
-
                 }
                 //This slave has now become idle (its queue is empty). Inform master.
                 sendstream.str("");
@@ -244,7 +246,8 @@ void MPI_Scheduler_Default<Prob_Consts, Subproblem_Params, Domain_Type>::Execute
             }
             else if(st.MPI_TAG == MessageType::FINISH){
                 assert(st.MPI_SOURCE==0); // only master can tell it to finish
-                break; //from the while(1) loop
+                PostProcessSolution(Solutions);
+                return Subproblem_Params(); // empty solution only master will return a meaningful solution
             }
         }
     }

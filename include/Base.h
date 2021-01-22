@@ -16,8 +16,8 @@
 #include "omp.h"
 
 #define    OMP_LOGGING 0
-#define    MPI_LOGGING 0
-#define HYBRID_LOGGING 1
+#define    MPI_LOGGING 1
+#define HYBRID_LOGGING 0
 
 #if MPI_LOGGING
 #define printProc(x) {int __id; \

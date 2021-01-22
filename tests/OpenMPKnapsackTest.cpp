@@ -2,7 +2,6 @@
 #include "Knapsack.h"
 #include "Base.h"
 #include "BnB_OMP_Solver.h"
-#include <limits>
 
 
 
@@ -16,11 +15,11 @@ TEST(OMPKnapsack, someItemsFit)
 	std::get<1>(TestConsts) = {10,2,10,4,10};
 	std::get<2>(TestConsts) = 10;	
 
-	auto result = solver.Maximize(BnB::Knapsack::GenerateToyProblem(), TestConsts);
-	if(std::get<2>(result) > 30)
-
-	EXPECT_EQ(std::get<2>(result),  30) <<  "Weight does not match";
-	std::cerr << "best cost calculated is " << std::get<2>(result) << " while " << 30 << " was expected" << std::endl;
+	auto result = std::get<0>(solver.Maximize(BnB::Knapsack::GenerateToyProblem(), TestConsts));
+	int cost = 0;
+	for(const auto& item : result)
+		cost += std::get<1>(TestConsts)[item];
+	EXPECT_EQ(cost,  30) <<  "Weight does not match";
 }	
 
 
@@ -34,13 +33,18 @@ TEST(OMPKnapsack, allItemsFit)
 	std::get<1>(TestConsts) = {10,2,10,4,10};
 	std::get<2>(TestConsts) = 100;	
 
-	auto result = solver.Maximize(BnB::Knapsack::GenerateToyProblem(), TestConsts);
-	EXPECT_EQ(std::get<2>(result),  36) <<  "Weight does not match";
-    std::cerr << "best cost calculated is " << std::get<2>(result) << " while " << 30 << " was expected" << std::endl;
+	
+	auto result = std::get<0>(solver.Maximize(BnB::Knapsack::GenerateToyProblem(), TestConsts));
+	int cost = 0;
+	for(const auto& item : result)
+		cost += std::get<1>(TestConsts)[item];
+
+	EXPECT_EQ(cost,  36) <<  "Weight does not match";
+	
 }
 
 TEST(OMPKnapsack, NoItemsFit)
-{
+{	
 	Solver_omp<BnB::Knapsack::Consts, BnB::Knapsack::Params, int> solver;
 	solver.setNumThreads(4);
 
@@ -49,9 +53,13 @@ TEST(OMPKnapsack, NoItemsFit)
 	std::get<1>(TestConsts) = {10,2,10,4,10};
 	std::get<2>(TestConsts) = 1;	
 
-	auto result = solver.Maximize(BnB::Knapsack::GenerateToyProblem(), TestConsts);
-	EXPECT_EQ(std::get<2>(result), 0) <<  "Weight does not match";
-    std::cerr << "best cost calculated is " << std::get<2>(result) << " while " << 30 << " was expected" << std::endl;
+	auto result = std::get<0>(solver.Maximize(BnB::Knapsack::GenerateToyProblem(), TestConsts));
+	int cost = 0;
+		
+	for(const auto& item : result)
+		cost += std::get<1>(TestConsts)[item];
+
+	EXPECT_EQ(cost,  0) <<  "Weight does not match";	
 }
 
 int main(int argc, char* argv[])

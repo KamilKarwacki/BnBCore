@@ -15,7 +15,7 @@ public:
         }
     };
 
-    void Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
+    Subproblem_Params Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
                  const Prob_Consts& prob,
                  const MPI_Message_Encoder<Subproblem_Params>& encoder,
                  const Goal goal,
@@ -25,7 +25,7 @@ public:
 
 
 template<typename Prob_Consts, typename Subproblem_Params, typename Domain_Type>
-void MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
+Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
                                                                                   const Prob_Consts& prob,
                                                                                   const MPI_Message_Encoder<Subproblem_Params>& encoder,
                                                                                   const Goal goal,
@@ -44,6 +44,7 @@ void MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(
     char buffer[2000];
 
     if(pid == 0){
+        int NumMessages = 0;
         printProc("we are running with embedded " << this->OpenMPThreads);
         // local Variables of master
         Subproblem_Params BestSubproblem;
@@ -63,6 +64,7 @@ void MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(
         MPI_Send(sendstream.str().c_str(),strlen(sendstream.str().c_str()), MPI_CHAR, 1, MessageType::PROB, MPI_COMM_WORLD);
         while(idleProcIds.size() != num - 1){
             MPI_Recv(buffer, 2000,MPI_CHAR, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
+            NumMessages++;
             receivstream.str(buffer);
             if(st.MPI_TAG == MessageType::GET_SLAVES){
                 int sl_needed;
@@ -98,10 +100,10 @@ void MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(
                 encoder.Decode_Solution(receivstream, Received_Solution);
                 Domain_Type CandidateBound;
                 receivstream >> CandidateBound;
-                printProc("received solution with bound: " << CandidateBound << " while best Bound is " << GlobalBestBound);
 
-                if(((bool)goal && CandidateBound > GlobalBestBound) ||
-                   (!(bool)goal && CandidateBound < GlobalBestBound) ){ // optimize with template specialization
+                if(((bool)goal && CandidateBound >= GlobalBestBound) ||
+                   (!(bool)goal && CandidateBound <= GlobalBestBound) ){ // optimize with template specialization
+                    printProc("received solution with bound: " << CandidateBound << " while best Bound is " << GlobalBestBound);
                     BestSubproblem  = Received_Solution;
                     GlobalBestBound = CandidateBound;
                 }
@@ -111,7 +113,9 @@ void MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(
         for(int i=1;i<num;i++){
             MPI_Send(buffer, 1, MPI_CHAR, i, MessageType::FINISH, MPI_COMM_WORLD);
         }
+        printProc("we needed " << NumMessages << " to the Master to solve the task");
         Problem_Def.PrintSolution(BestSubproblem);
+        return BestSubproblem;
     }
     else{
         // local variables of slave
@@ -164,36 +168,44 @@ void MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(
 
                             // try to make the bound better
                             bool SendToMaster = false;
-                            auto CandidateBound = std::get<Domain_Type>(Problem_Def.GetBound(prob, sol));
-                            if(((bool)goal && CandidateBound > LocalBestBound)
-                               || (!(bool)goal && CandidateBound < LocalBestBound)){
-                                SendToMaster = true;
+                            auto Feasibility = Problem_Def.IsFeasible(prob, sol);
+                            if(Feasibility == BnB::FEASIBILITY::FULL)
+                            {
+                                auto CandidateBound = std::get<Domain_Type>(Problem_Def.GetBound(prob, sol));
                                 #pragma omp critical
                                 {
-                                    LocalBestBound = CandidateBound;
+                                    if(((bool)goal && CandidateBound >= LocalBestBound)
+                                   || (!(bool)goal && CandidateBound <= LocalBestBound)){
+                                    SendToMaster = true;
+                                        LocalBestBound = CandidateBound;
+                                    }
                                 }
+                            }else if(Feasibility == BnB::FEASIBILITY::NONE)
+                            {
+                                continue;
                             }
 
                             // check if we cant divide further
-                            if(Problem_Def.IsBranchable(prob, sol) and SendToMaster){
+                            std::vector<Subproblem_Params> v;
+                            if(Problem_Def.IsBranchable(prob, sol)){
+                                v = Problem_Def.SplitSolution(prob, sol);
+                                for(const auto& el : v){
+                                    #pragma omp critical (queuelock)
+                                    {
+                                        LocalTaskQueue.push(el);
+                                    }}
+
+                            }else if(SendToMaster){
                                 sendstream.str("");
                                 encoder.Encode_Solution(sendstream, sol);
                                 sendstream << LocalBestBound << " ";
-                                //tell master that feasible solution is reached
                                 #pragma omp critical
                                 {
+                                    // inform the master that an unsplittable solution is reached
                                     MPI_Send(&sendstream.str()[0],strlen(sendstream.str().c_str())+1, MPI_CHAR,0,MessageType::DONE, MPI_COMM_WORLD);
                                 }
                                 continue;
                             }
-
-                            std::vector<Subproblem_Params> v = Problem_Def.SplitSolution(prob, sol);
-
-                            for(const auto& el : v){
-                                #pragma omp critical (queuelock)
-                                {
-                                    LocalTaskQueue.push(el);
-                                }}
                         }
                     }
 
@@ -233,7 +245,7 @@ void MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(
             }
             else if(st.MPI_TAG == MessageType::FINISH){
                 assert(st.MPI_SOURCE==0); // only master can tell it to finish
-                break; //from the while(1) loop
+                return Subproblem_Params(); // empty solution only master will return a meaningful solution
             }
         }
     }

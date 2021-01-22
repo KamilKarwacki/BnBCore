@@ -16,8 +16,24 @@ macro(package_add_test TESTNAME)
 	set_target_properties(${TESTNAME} PROPERTIES FOLDER tests)
 endmacro()
 
+function(add_mpi_test TESTNAME)
+  include_directories(${MY_TESTING_INCLUDES})
+  # My test are all called name_test.cpp
+  add_executable(${TESTNAME} ${ARGN})
+  # libraries we need for the test
+  set(LIBRARIES BranchNBound)
+  target_link_libraries(${TESTNAME} gtest gmock gtest_main ${LIBRARIES})
+
+  set(test_parameters "${MPIEXEC_NUMPROC_FLAG} 3 ./${TESTNAME}")
+  #message(${test_parameters})
+  #message(${MPIEXEC})
+  add_test(NAME ${TESTNAME} COMMAND ${MPIEXEC} ${test_parameters})
+endfunction(add_mpi_test)
+
+
 
 add_subdirectory("${PROJECT_SOURCE_DIR}/extern/googletest" "extern/googletest")
 package_add_test(EncoderTest EncoderTests.cpp)
 package_add_test(OpenMPTest  OpenMPKnapsackTest.cpp)
+add_mpi_test(MPITest         MPIKnapsackTest.cpp)
 

@@ -36,9 +36,6 @@ namespace BnB::Knapsack
     using Params = Subproblem_Parameters<
             std::vector<int> // Taken objects
             >;
-            //int,              // weight of config
-            //int>;             // cost of config
-
 
     Consts GenerateProblemConstants()
     {
@@ -81,8 +78,6 @@ namespace BnB::Knapsack
                     }
                 }
                 std::get<0>(subProb) = indices;
-                //std::get<1>(subProb) = w;
-                //std::get<2>(subProb) = c;
                 subProblems.push_back(subProb);
             }
 /*            printProc("splitting into " << subProblems.size());
