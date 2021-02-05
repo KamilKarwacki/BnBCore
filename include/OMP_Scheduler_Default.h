@@ -33,19 +33,24 @@ void OMP_Scheduler_Default<Problem_Consts, Subproblem_Params, Domain_Type>::DoTa
         Domain_Type& BestBound,
         const Subproblem_Params& subpr)
 {
-    // reasons to discard: our lower bound for the minimum is bigger than the current best UpperBound
-    if(Problem_Def.Discard(prob, subpr, BestBound))
-        return;
 
+    //ignore if its bound is worse than already known best sol.
+    Domain_Type LowerBound = std::get<Domain_Type>(Problem_Def.GetLowerBound(prob, subpr));
+    if(((bool)goal && LowerBound < BestBound)
+       || (!(bool)goal && LowerBound > BestBound)){
+        return;
+    }
+
+    Domain_Type CandidateBound;
     switch(Problem_Def.IsFeasible(prob,subpr)){
         case BnB::FEASIBILITY::FULL: {
             // try to set new bound
-            Domain_Type newBound = std::get<Domain_Type>(Problem_Def.GetBound(prob, subpr));
-            if (((bool) goal && (newBound >= BestBound))
-                || (!(bool) goal && (newBound <= BestBound))) {
+            CandidateBound = std::get<Domain_Type>(Problem_Def.GetUpperBound(prob, subpr));
+            if (((bool) goal && (CandidateBound >= BestBound))
+                || (!(bool) goal && (CandidateBound <= BestBound))) {
                 #pragma omp critical
                 {
-                    BestBound = newBound;
+                    BestBound = CandidateBound;
                     BestSubproblem = subpr;
                 }
             }
@@ -58,7 +63,7 @@ void OMP_Scheduler_Default<Problem_Consts, Subproblem_Params, Domain_Type>::DoTa
     }
 
 
-    if(Problem_Def.IsBranchable(prob, subpr))
+    if(std::abs(CandidateBound - LowerBound) > this->eps)
     {
         std::vector<Subproblem_Params> result = Problem_Def.SplitSolution(prob, subpr);
         for(const auto& r : result)

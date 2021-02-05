@@ -89,7 +89,7 @@ namespace BnB::Knapsack
             return subProblems;
         };
 
-        KnapsackProblem.Discard = [](const Consts& consts, const Params& params, const std::variant<int, float, double> CurrentBound){
+        KnapsackProblem.GetLowerBound = [](const Consts& consts, const Params& params){
             // calculate the cost as if all items were to fit in the sack
            std::vector<int> objects = std::get<0>(params);
            std::vector<int> costs   = std::get<1>(consts);
@@ -98,10 +98,10 @@ namespace BnB::Knapsack
            for(const auto& object : objects)
                sumCost += costs[object];
 
-           return sumCost < std::get<int>(CurrentBound);
+           return sumCost;
         };
 
-        KnapsackProblem.GetBound = [](const Consts& consts, const Params& params){
+        KnapsackProblem.GetUpperBound = [](const Consts& consts, const Params& params){
             std::vector<int> weights = std::get<0>(consts);
             std::vector<int> costs   = std::get<1>(consts);
             std::vector<int> objects = std::get<0>(params);
@@ -139,16 +139,6 @@ namespace BnB::Knapsack
                 return BnB::FEASIBILITY::NONE;
         };
 
-        KnapsackProblem.IsBranchable = [](const Consts& consts, const Params& params){
-            if(std::get<0>(params).size() <= 1)
-                return false;
-
-            int CombinedWeight = 0;
-            for(const auto& index : std::get<0>(params))
-                CombinedWeight += std::get<0>(consts)[index];
-
-            return CombinedWeight > std::get<2>(consts);
-       };
 
         KnapsackProblem.PrintSolution = [](const Params& params){
             printProc("solution has " << std::get<0>(params).size() << " items");

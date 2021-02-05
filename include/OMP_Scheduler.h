@@ -13,4 +13,8 @@ public:
             const Problem_Consts& prob,
             const Goal goal,
             const Domain_Type WorstBound) = 0;
+
+    void Eps(Domain_Type e){eps = e;}
+protected:
+    Domain_Type eps;
 };

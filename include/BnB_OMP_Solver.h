@@ -8,6 +8,8 @@ class Solver_omp
 {
 public:
     void setNumThreads(size_t num) {numThreads = num;};
+    void setEps(Domain_Type e) {scheduler->Eps(e);}
+
 
     Subproblem_Params Maximize(const Problem_Definition<Problem_Consts, Subproblem_Params>& Problem_Def, const Problem_Consts& prob);
     Subproblem_Params Minimize(const Problem_Definition<Problem_Consts, Subproblem_Params>& Problem_Def, const Problem_Consts& prob);

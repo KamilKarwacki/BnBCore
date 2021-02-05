@@ -56,18 +56,17 @@ public:
     std::function<Subproblem_Params               (const Problem_Consts&)> GetInitialSubproblem = nullptr;
     // takes a sub-problem and splits it up further
     std::function<std::vector<Subproblem_Params>  (const Problem_Consts&, const Subproblem_Params&)> SplitSolution = nullptr;
-    // the branch and bound algorithm needs a method that can calculate a Bound otherwise we will split and never discard
-    std::function<std::variant<int, float, double>(const Problem_Consts&, const Subproblem_Params&)> GetBound = nullptr;
-    // takes a sub problem and lower bound and decides if the subproblem needs to be discarded
-    std::function<bool                            (const Problem_Consts&, const Subproblem_Params&, const std::variant<int, float, double>)> Discard = nullptr;
     // says whether a solution is precise enough
     std::function<BnB::FEASIBILITY                (const Problem_Consts&, const Subproblem_Params&)> IsFeasible = nullptr;
     // decides if the subproblem can be split further
-    std::function<bool                            (const Problem_Consts&, const Subproblem_Params&)> IsBranchable = nullptr;
+    //std::function<bool                            (const Problem_Consts&, const Subproblem_Params&)> IsBranchable = nullptr; TODO Delete this its deprecated
+    // for a minimum, get a lower bound for the lower bound
+    std::function<std::variant<int, float, double>(const Problem_Consts&, const Subproblem_Params&)> GetLowerBound = nullptr;
+    // for a minimum this should calculate the upper bound for the minimum, this is an achievable value for the minimum
+    std::function<std::variant<int, float, double>(const Problem_Consts&, const Subproblem_Params&)> GetUpperBound = nullptr;
     // trivial function to display the solution
     std::function<void                            (const Subproblem_Params& params)> PrintSolution = nullptr;
 };
-
 
 
 enum class Goal : bool {
