@@ -8,13 +8,14 @@ class OMP_Scheduler_Default : public OMP_Scheduler<Problem_Consts, Subproblem_Pa
 {
 public:
     Subproblem_Params Execute(
-            const Problem_Definition<Problem_Consts, Subproblem_Params>& Problem_Def,
+            const Problem_Definition<Problem_Consts, Subproblem_Params, Domain_Type>& Problem_Def,
             const Problem_Consts& prob,
             const Goal goal,
             Domain_Type BestBound) override;
 
+private:
     void DoTask(
-            const Problem_Definition<Problem_Consts, Subproblem_Params>& Problem_Def,
+            const Problem_Definition<Problem_Consts, Subproblem_Params, Domain_Type>& Problem_Def,
             const Problem_Consts& prob,
             const Goal goal,
             Subproblem_Params& BestSubproblem,
@@ -26,52 +27,59 @@ public:
 
 template<typename Problem_Consts, typename Subproblem_Params, typename Domain_Type>
 void OMP_Scheduler_Default<Problem_Consts, Subproblem_Params, Domain_Type>::DoTask(
-        const Problem_Definition<Problem_Consts, Subproblem_Params>& Problem_Def,
+        const Problem_Definition<Problem_Consts, Subproblem_Params, Domain_Type>& Problem_Def,
         const Problem_Consts& prob,
         const Goal goal,
         Subproblem_Params& BestSubproblem,
         Domain_Type& BestBound,
         const Subproblem_Params& subpr)
 {
-
     //ignore if its bound is worse than already known best sol.
-    Domain_Type LowerBound = std::get<Domain_Type>(Problem_Def.GetLowerBound(prob, subpr));
-    if(((bool)goal && LowerBound < BestBound)
-       || (!(bool)goal && LowerBound > BestBound)){
+    auto [LowerBound, UpperBound] = Problem_Def.GetEstimateForBounds(prob, subpr);
+    if (((bool) goal && LowerBound < BestBound)
+        || (!(bool) goal && LowerBound > BestBound)) {
         return;
     }
 
+    // try to make the bound better
+    auto Feasibility = Problem_Def.IsFeasible(prob, subpr);
     Domain_Type CandidateBound;
-    switch(Problem_Def.IsFeasible(prob,subpr)){
-        case BnB::FEASIBILITY::FULL: {
-            // try to set new bound
-            CandidateBound = std::get<Domain_Type>(Problem_Def.GetUpperBound(prob, subpr));
-            if (((bool) goal && (CandidateBound >= BestBound))
-                || (!(bool) goal && (CandidateBound <= BestBound))) {
-                #pragma omp critical
-                {
-                    BestBound = CandidateBound;
-                    BestSubproblem = subpr;
-                }
+    if (Feasibility == BnB::FEASIBILITY::FULL) {
+        CandidateBound = Problem_Def.GetContainedUpperBound(prob, subpr);
+        #pragma omp critical
+        {
+            if (((bool) goal && CandidateBound >= BestBound)
+                || (!(bool) goal && CandidateBound <= BestBound)) {
+                BestBound = CandidateBound;
+                BestSubproblem = subpr;
             }
-            break;
         }
-        case BnB::FEASIBILITY::PARTIAL:
-            break;
-        case BnB::FEASIBILITY::NONE: // skip this problem
-            return;
+    }else if(Feasibility == BnB::FEASIBILITY::PARTIAL){
+        CandidateBound = UpperBound;
     }
+    else if (Feasibility == BnB::FEASIBILITY::NONE)
+        return;
 
 
     if(std::abs(CandidateBound - LowerBound) > this->eps)
     {
         std::vector<Subproblem_Params> result = Problem_Def.SplitSolution(prob, subpr);
-        for(const auto& r : result)
-        {
-            //int prio = std::get<0>(r);
-            #pragma omp task firstprivate(r) shared(BestSubproblem, BestBound)
+        if(this->mode == TraversalMode::DFS){
+            for(auto it = result.rbegin(); it != result.rend(); it++)
             {
-                DoTask(Problem_Def, prob, goal, BestSubproblem, BestBound, r);
+                const auto r = *it;
+                #pragma omp task firstprivate(r) shared(BestSubproblem, BestBound)
+                {
+                    DoTask(Problem_Def, prob, goal, BestSubproblem, BestBound, r);
+                }
+            }
+        }else if( this->mode == TraversalMode::BFS){
+            for(const auto& r : result)
+            {
+                #pragma omp task firstprivate(r) shared(BestSubproblem, BestBound)
+                {
+                    DoTask(Problem_Def, prob, goal, BestSubproblem, BestBound, r);
+                }
             }
         }
     }
@@ -82,7 +90,7 @@ void OMP_Scheduler_Default<Problem_Consts, Subproblem_Params, Domain_Type>::DoTa
 
 template<typename Problem_Consts, typename Subproblem_Params, typename Domain_Type>
 Subproblem_Params OMP_Scheduler_Default<Problem_Consts, Subproblem_Params, Domain_Type>::Execute(
-                                  const Problem_Definition<Problem_Consts, Subproblem_Params>& Problem_Def,
+                                  const Problem_Definition<Problem_Consts, Subproblem_Params, Domain_Type>& Problem_Def,
                                   const Problem_Consts& prob,
                                   const Goal goal,
                                   Domain_Type BestBound)

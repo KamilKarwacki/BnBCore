@@ -50,30 +50,23 @@ namespace BnB::Knapsack
         return consts;
     }
 
-
-    Problem_Definition<Consts, Params> GenerateToyProblem()
+    Problem_Definition<Consts, Params, int> GenerateToyProblem()
     {
         using namespace Detail;
         // object that will hold the functions called by the solver
-        Problem_Definition<Consts, Params> KnapsackProblem;
+        Problem_Definition<Consts, Params, int> KnapsackProblem;
 
         // you can assume that the subproblem is not feasible yet so it can be split
         KnapsackProblem.SplitSolution = [](const Consts& consts, const Params & params){
             std::vector<Params> subProblems;
             auto objects = std::get<0>(params);
-            auto weights = std::get<0>(consts);
-            auto costs = std::get<1>(consts);
             for(size_t i = 0; i < objects.size(); i++)
             {
                 Params subProb;
                 std::vector<int> indices;
-                int w = 0;
-                int c = 0;
                 for(size_t j = 0; j < objects.size(); j++)
                 {
                     if(i != j){
-                        w += weights[objects[j]];
-                        c += costs[objects[j]];
                         indices.push_back(objects[j]);
                     }
                 }
@@ -89,7 +82,7 @@ namespace BnB::Knapsack
             return subProblems;
         };
 
-        KnapsackProblem.GetLowerBound = [](const Consts& consts, const Params& params){
+        KnapsackProblem.GetEstimateForBounds = [](const Consts& consts, const Params& params){
             // calculate the cost as if all items were to fit in the sack
            std::vector<int> objects = std::get<0>(params);
            std::vector<int> costs   = std::get<1>(consts);
@@ -98,10 +91,10 @@ namespace BnB::Knapsack
            for(const auto& object : objects)
                sumCost += costs[object];
 
-           return sumCost;
+           return std::tuple<int,int>(sumCost, 0);
         };
 
-        KnapsackProblem.GetUpperBound = [](const Consts& consts, const Params& params){
+        KnapsackProblem.GetContainedUpperBound = [](const Consts& consts, const Params& params){
             std::vector<int> weights = std::get<0>(consts);
             std::vector<int> costs   = std::get<1>(consts);
             std::vector<int> objects = std::get<0>(params);
@@ -132,7 +125,7 @@ namespace BnB::Knapsack
                 if(std::get<0>(consts)[object] <= std::get<2>(consts))
                     NumOfItemsThatFit++;
 
-             //printProc("this config has " << std::get<0>(params).size() << " items in it, but only" << NumOfItemsThatFit <<" fit" );
+            //printProc("this config has " << std::get<0>(params).size() << " items in it, but only" << NumOfItemsThatFit <<" fit" );
             if(NumOfItemsThatFit > 0)
                 return BnB::FEASIBILITY::FULL;
             else
@@ -151,10 +144,8 @@ namespace BnB::Knapsack
 
         KnapsackProblem.GetInitialSubproblem = [](const Consts& prob){
            Params initial;
-           // cost needs to be set to 0
-           std::get<0>(initial) = {0,1,2,3,4};
-           //std::get<1>(initial) = 0;
-           //std::get<2>(initial) = 0;
+           for(int i = 0; i < std::get<0>(prob).size(); i++)
+               std::get<0>(initial).push_back(i);
            return initial;
         };
 

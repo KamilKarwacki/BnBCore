@@ -1,37 +1,55 @@
 #pragma once
-#include "Base.h"
-#include "MPI_Scheduler_Default.h"
+
+#include "MPI_Scheduler.h"
+#include <iomanip>
 
 
 template<typename Prob_Consts, typename Subproblem_Params, typename Domain_Type>
 class MPI_Scheduler_Priority: public MPI_Scheduler<Prob_Consts, Subproblem_Params, Domain_Type>
 {
 public:
-
-    struct comparator{
-       bool operator()(const Subproblem_Params& p1, const Subproblem_Params& p2){
-           return std::get<0>(p1) < std::get<0>(p2);
-       }
-    };
-
-
-    Subproblem_Params Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
+    Subproblem_Params Execute(const Problem_Definition<Prob_Consts, Subproblem_Params, Domain_Type>& Problem_Def,
                  const Prob_Consts& prob,
                  const MPI_Message_Encoder<Subproblem_Params>& encoder,
                  const Goal goal,
                  const Domain_Type WorstBound) override;
 };
 
-
+// TODO compare to normal if statements
 /*
- * Same idea as Default implementation but it holds a priority queue of tasks and also a communication frequency
- * the communication frequency might also be added to the default impl
+ * Master:
+ * send initial problem
+ *      while(procs not all idle)
+ *      receive Message
+ *      case Slave Request:
+ *          master gets local bound and number of slaves needed
+ *          he updated his new bound and sends the new one to the slave together with ids of the procs
+ *
+ *      case Processor is Idle:
+ *          set as idle
+ *
+ *      case Processor found a solution which is not divisible anymore
+ *          bound is received and checked against the current best bound
+ *          overwritten if needed
+ *
+ * Slave:
+ *      while(not terminated)
+ *          receive Message
+ *          case New Problem:
+ *              push it to queue and update bound if needed
+ *              if we found a solution which cant be expanded we send it to master
+ *              but only of it also has the best LocalBound currently
+ *              expand the problem and ask the master for slaves
  *
  */
+//for(typename std::vector<Subproblem_Params>::reverse_iterator i = v.rbegin();
+//		     i != v.rend(); ++i ) {
+//	task_queue.push(*i);
+//}
 
 
 template<typename Prob_Consts, typename Subproblem_Params, typename Domain_Type>
-Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
+Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(const Problem_Definition<Prob_Consts, Subproblem_Params, Domain_Type>& Problem_Def,
                                                                                  const Prob_Consts& prob,
                                                                                  const MPI_Message_Encoder<Subproblem_Params>& encoder,
                                                                                  const Goal goal,
@@ -46,15 +64,15 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
     sendstream << std::setprecision(15);
     std::stringstream receivstream("");
     receivstream << std::setprecision(15);
-    Subproblem_Params BestSubproblem;
+    Subproblem_Params BestSubproblem = Problem_Def.GetInitialSubproblem(prob);
 
     if(pid == 0){
-        DefaultMasterBehavior(sendstream, receivstream, Problem_Def, prob, encoder, goal, WorstBound);
+        BestSubproblem = DefaultMasterBehavior(sendstream, receivstream, Problem_Def, prob, encoder, goal, WorstBound);
     }
     else{
         char buffer[2000];
         // local variables of slave
-        std::priority_queue<Subproblem_Params, std::vector<Subproblem_Params>, comparator> LocalTaskQueue;
+        std::deque<Subproblem_Params> LocalTaskQueue;
         Domain_Type LocalBestBound = WorstBound;
 
         int counter = 0;
@@ -67,7 +85,7 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
 
                 Subproblem_Params Received_Params;
                 encoder.Decode_Solution(receivstream, Received_Params);
-                LocalTaskQueue.push(Received_Params);
+                LocalTaskQueue.push_back(Received_Params);
 
                 Domain_Type newBoundValue;
                 receivstream >> newBoundValue;
@@ -79,35 +97,46 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
 
                 while(!LocalTaskQueue.empty()){
                     //take out one element from queue, expand it
-                    Subproblem_Params sol = LocalTaskQueue.top(); LocalTaskQueue.pop();
+                    Subproblem_Params sol;
+                    if(this->mode == TraversalMode::DFS){
+                        sol = LocalTaskQueue.back(); LocalTaskQueue.pop_back();
+                    }else if( this->mode == TraversalMode::BFS){
+                        sol = LocalTaskQueue.front(); LocalTaskQueue.pop_front();
+                    }
+
                     //ignore if its bound is worse than already known best sol.
-                    Domain_Type LowerBound = std::get<Domain_Type>(Problem_Def.GetLowerBound(prob, sol));
-                    if(((bool)goal && LowerBound < LocalBestBound)
-                       || (!(bool)goal && LowerBound > LocalBestBound)){
+                    auto [LowerBound, UpperBound] = Problem_Def.GetEstimateForBounds(prob, sol);
+                    if (((bool) goal && LowerBound < LocalBestBound)
+                        || (!(bool) goal && LowerBound > LocalBestBound)) {
                         continue;
                     }
 
                     // try to make the bound better only if the solution lies in a feasible domain
-
+                    bool IsPotentialBestSolution = false;
                     auto Feasibility = Problem_Def.IsFeasible(prob, sol);
                     Domain_Type CandidateBound;
-                    if(Feasibility == BnB::FEASIBILITY::FULL)
-                    {
-                        CandidateBound = std::get<Domain_Type>(Problem_Def.GetUpperBound(prob, sol));
-                        if(((bool)goal && CandidateBound >= LocalBestBound)
-                           || (!(bool)goal && CandidateBound <= LocalBestBound)){
+                    if (Feasibility == BnB::FEASIBILITY::FULL) {
+                        CandidateBound = (Problem_Def.GetContainedUpperBound(prob, sol));
+                        if (((bool) goal && CandidateBound >= LocalBestBound)
+                            || (!(bool) goal && CandidateBound <= LocalBestBound)) {
                             LocalBestBound = CandidateBound;
-                            BestSubproblem = sol;
+                            IsPotentialBestSolution = true;
                         }
-                    }else if(Feasibility == BnB::FEASIBILITY::NONE) // basically discard again
+                    } else if(Feasibility == BnB::FEASIBILITY::PARTIAL){
+                        // use our backup for the CandidateBound
+                        CandidateBound = UpperBound;
+                    }
+                    else if (Feasibility == BnB::FEASIBILITY::NONE) // basically discard again
                         continue;
 
-                   // printProc("CandidateBound = " << CandidateBound << " LowerBound = " << LowerBound);
+                    //printProc("CandidateBound = " << CandidateBound << " LowerBound = " << LowerBound);
                     std::vector<Subproblem_Params> v;
                     if(std::abs(CandidateBound - LowerBound) > this->eps){ // epsilon criterion for convergence
                         v = Problem_Def.SplitSolution(prob, sol);
                         for(const auto& el : v)
-                            LocalTaskQueue.push(el);
+                            LocalTaskQueue.push_back(el);
+                    }else if(IsPotentialBestSolution){
+                        BestSubproblem = sol;
                     }
 
                     // request master for slaves
@@ -131,8 +160,12 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
                             int sl_no;
                             receivstream >> sl_no;
                             sendstream.str("");
-                            Subproblem_Params SubProb = LocalTaskQueue.top();
-                            LocalTaskQueue.pop();
+                            Subproblem_Params SubProb;
+                            if(this->mode == TraversalMode::DFS){
+                                SubProb = LocalTaskQueue.back(); LocalTaskQueue.pop_back();
+                            }else if( this->mode == TraversalMode::BFS){
+                                SubProb = LocalTaskQueue.front(); LocalTaskQueue.pop_front();
+                            }
                             encoder.Encode_Solution(sendstream, SubProb);
                             sendstream << LocalBestBound<< " ";
                             //send it to idle processor

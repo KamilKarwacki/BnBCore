@@ -1,6 +1,5 @@
 #pragma once
-#include "Base.h"
-#include "MPI_Scheduler_Default.h"
+#include "MPI_Scheduler.h"
 
 template<typename Prob_Consts, typename Subproblem_Params, typename Domain_Type>
 class MPI_Scheduler_Hybrid: public MPI_Scheduler<Prob_Consts, Subproblem_Params, Domain_Type>
@@ -13,7 +12,7 @@ public:
         }
     };
 
-    Subproblem_Params Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
+    Subproblem_Params Execute(const Problem_Definition<Prob_Consts, Subproblem_Params, Domain_Type>& Problem_Def,
                  const Prob_Consts& prob,
                  const MPI_Message_Encoder<Subproblem_Params>& encoder,
                  const Goal goal,
@@ -23,7 +22,7 @@ public:
 
 
 template<typename Prob_Consts, typename Subproblem_Params, typename Domain_Type>
-Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(const Problem_Definition<Prob_Consts, Subproblem_Params>& Problem_Def,
+Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(const Problem_Definition<Prob_Consts, Subproblem_Params, Domain_Type>& Problem_Def,
                                                                                   const Prob_Consts& prob,
                                                                                   const MPI_Message_Encoder<Subproblem_Params>& encoder,
                                                                                   const Goal goal,
@@ -38,16 +37,16 @@ Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Ty
     sendstream << std::setprecision(15);
     std::stringstream receivstream("");
     receivstream << std::setprecision(15);
-    Subproblem_Params BestSubproblem;
+    Subproblem_Params BestSubproblem = Problem_Def.GetInitialSubproblem(prob);
 
 
     if(pid == 0){
-        DefaultMasterBehavior(sendstream, receivstream, Problem_Def, prob, encoder, goal, WorstBound);
+        BestSubproblem = DefaultMasterBehavior(sendstream, receivstream, Problem_Def, prob, encoder, goal, WorstBound);
     }
     else{
         char buffer[2000];
         // local variables of slave
-        std::priority_queue<Subproblem_Params, std::vector<Subproblem_Params>, comparator> LocalTaskQueue;
+        std::deque<Subproblem_Params> LocalTaskQueue;
         Domain_Type LocalBestBound = WorstBound;
         int counter;
 
@@ -59,7 +58,7 @@ Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Ty
 
                 Subproblem_Params Received_Params;
                 encoder.Decode_Solution(receivstream, Received_Params);
-                LocalTaskQueue.push(Received_Params);
+                LocalTaskQueue.push_back(Received_Params);
 
                 Domain_Type newBoundValue;
                 receivstream >> newBoundValue;
@@ -81,15 +80,18 @@ Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Ty
                             {
                                 isEmpty = LocalTaskQueue.empty();
                                 if (!isEmpty) {
-                                    sol = LocalTaskQueue.top();
-                                    LocalTaskQueue.pop();
+                                    if(this->mode == TraversalMode::DFS){
+                                        sol = LocalTaskQueue.back(); LocalTaskQueue.pop_back();
+                                    }else if( this->mode == TraversalMode::BFS){
+                                        sol = LocalTaskQueue.front(); LocalTaskQueue.pop_front();
+                                    }
                                 }
                             }
                             if (isEmpty)
                                 continue;
 
                             //ignore if its bound is worse than already known best sol.
-                            Domain_Type LowerBound = std::get<Domain_Type>(Problem_Def.GetLowerBound(prob, sol));
+                            auto [LowerBound, UpperBound] = Problem_Def.GetEstimateForBounds(prob, sol);
                             if (((bool) goal && LowerBound < LocalBestBound)
                                 || (!(bool) goal && LowerBound > LocalBestBound)) {
                                 continue;
@@ -99,7 +101,7 @@ Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Ty
                             auto Feasibility = Problem_Def.IsFeasible(prob, sol);
                             Domain_Type CandidateBound;
                             if (Feasibility == BnB::FEASIBILITY::FULL) {
-                                CandidateBound = std::get<Domain_Type>(Problem_Def.GetUpperBound(prob, sol));
+                                CandidateBound = Problem_Def.GetContainedUpperBound(prob, sol);
                                 #pragma omp critical
                                 {
                                     if (((bool) goal && CandidateBound >= LocalBestBound)
@@ -108,7 +110,10 @@ Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Ty
                                         BestSubproblem = sol;
                                     }
                                 }
-                            } else if (Feasibility == BnB::FEASIBILITY::NONE)
+                            }else if(Feasibility == BnB::FEASIBILITY::PARTIAL){
+                                CandidateBound = UpperBound;
+                            }
+                            else if (Feasibility == BnB::FEASIBILITY::NONE)
                                 continue;
 
 
@@ -119,7 +124,7 @@ Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Ty
                                 for (const auto &el : v) {
                                     #pragma omp critical (queuelock)
                                     {
-                                        LocalTaskQueue.push(el);
+                                        LocalTaskQueue.push_back(el);
                                     }
                                 }
                             }
@@ -144,7 +149,11 @@ Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Ty
                         for(int i=0; i<slaves_avbl; i++){
                             //give a problem to each slave
                             Subproblem_Params SubProb;
-                            SubProb = LocalTaskQueue.top(); LocalTaskQueue.pop();
+                            if(this->mode == TraversalMode::DFS){
+                                SubProb = LocalTaskQueue.back(); LocalTaskQueue.pop_back();
+                            }else if( this->mode == TraversalMode::BFS){
+                                SubProb = LocalTaskQueue.front(); LocalTaskQueue.pop_front();
+                            }
                             int sl_no;
                             receivstream >> sl_no;
                             sendstream.str("");

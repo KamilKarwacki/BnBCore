@@ -43,6 +43,7 @@ public: // make it a friend of Solver maybe
 // specializations for different basic types including vectors of these types
 // TODO matrices of basic types
 // TODO C++20 concepts
+// TODO what about making it MPI_Types automatically
 // --------------------------------------------------------------------------
 template<>
 void encodeParam(std::stringstream& ss, const int& p)

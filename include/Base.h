@@ -15,8 +15,8 @@
 #include "mpi.h"
 #include "omp.h"
 
-#define    OMP_LOGGING 0
-#define    MPI_LOGGING 1
+#define    OMP_LOGGING 1
+#define    MPI_LOGGING 0
 #define HYBRID_LOGGING 0
 
 #if MPI_LOGGING
@@ -48,7 +48,7 @@ namespace BnB
 }
 
 // holds the functions that will perform actions on the subproblems
-template<typename Problem_Consts, typename Subproblem_Params>
+template<typename Problem_Consts, typename Subproblem_Params, typename Domain_Type>
 class Problem_Definition
 {
 public:
@@ -56,14 +56,12 @@ public:
     std::function<Subproblem_Params               (const Problem_Consts&)> GetInitialSubproblem = nullptr;
     // takes a sub-problem and splits it up further
     std::function<std::vector<Subproblem_Params>  (const Problem_Consts&, const Subproblem_Params&)> SplitSolution = nullptr;
-    // says whether a solution is precise enough
+    // says whether a solution lies in a feasible domain
     std::function<BnB::FEASIBILITY                (const Problem_Consts&, const Subproblem_Params&)> IsFeasible = nullptr;
-    // decides if the subproblem can be split further
-    //std::function<bool                            (const Problem_Consts&, const Subproblem_Params&)> IsBranchable = nullptr; TODO Delete this its deprecated
     // for a minimum, get a lower bound for the lower bound
-    std::function<std::variant<int, float, double>(const Problem_Consts&, const Subproblem_Params&)> GetLowerBound = nullptr;
+    std::function<std::tuple<Domain_Type, Domain_Type> (const Problem_Consts&, const Subproblem_Params&)> GetEstimateForBounds = nullptr;
     // for a minimum this should calculate the upper bound for the minimum, this is an achievable value for the minimum
-    std::function<std::variant<int, float, double>(const Problem_Consts&, const Subproblem_Params&)> GetUpperBound = nullptr;
+    std::function<Domain_Type(const Problem_Consts&, const Subproblem_Params&)> GetContainedUpperBound = nullptr;
     // trivial function to display the solution
     std::function<void                            (const Subproblem_Params& params)> PrintSolution = nullptr;
 };
