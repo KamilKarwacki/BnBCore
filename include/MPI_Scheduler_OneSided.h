@@ -20,7 +20,7 @@ public:
 
     MPI_Scheduler<Prob_Consts, Subproblem_Params, Domain_Type>* TermCheckFrequency(int freq){TerminationCheckFrequency = freq; return this;}
 protected:
-    int TerminationCheckFrequency = 1000;
+    int TerminationCheckFrequency = 100;
     float PercentageToShare = 0.4f;
 };
 
@@ -39,6 +39,16 @@ template<> int ConvertTypeToMPIType<float>() { return MPI_FLOAT; }
 template<> int ConvertTypeToMPIType<double>() { return MPI_DOUBLE; }
 
 
+
+MPI_Datatype UserDefinedType()
+{
+    MPI_Datatype my_type;
+    MPI_Type_contiguous(2,MPI_DOUBLE, &my_type);
+    MPI_Type_commit(&my_type);
+    return my_type;
+}
+
+
 template<typename Prob_Consts, typename Subproblem_Params, typename Domain_Type>
 Subproblem_Params MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(
         const Problem_Definition<Prob_Consts, Subproblem_Params, Domain_Type> &Problem_Def,
@@ -46,6 +56,8 @@ Subproblem_Params MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_
         const MPI_Message_Encoder<Subproblem_Params> &encoder,
         const Goal goal,
         const Domain_Type WorstBound) {
+
+    MPI_Datatype UserType = UserDefinedType();
 
     int pid, num;
     MPI_Comm_rank(MPI_COMM_WORLD, &pid);
@@ -68,6 +80,7 @@ Subproblem_Params MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_
 
     char buffer[20000];
     int NumMessages = 0;
+    int NumProblemsSolved = 0;
 
     std::deque<Subproblem_Params> LocalTaskQueue;
     Domain_Type LocalBestBound = WorstBound;
@@ -95,6 +108,7 @@ Subproblem_Params MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_
     while (true) {
         if (!LocalTaskQueue.empty()) {
             counter++;
+    	    NumProblemsSolved++;
 
             //take out one element from queue, expand it
             Subproblem_Params sol;
@@ -112,7 +126,6 @@ Subproblem_Params MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_
             }
 
             // try to make the bound better only if the solution lies in a feasible domain
-            bool IsPotentialBestSolution = false;
             auto Feasibility = Problem_Def.IsFeasible(prob, sol);
             Domain_Type CandidateBound;
             if (Feasibility == BnB::FEASIBILITY::FULL) {
@@ -120,7 +133,7 @@ Subproblem_Params MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_
                 if (((bool) goal && CandidateBound >= LocalBestBound)
                     || (!(bool) goal && CandidateBound <= LocalBestBound)) {
                     LocalBestBound = CandidateBound;
-                    IsPotentialBestSolution = true;
+                    BestSubproblem = sol;
                 }
             } else if(Feasibility == BnB::FEASIBILITY::PARTIAL){
                 // use our backup for the CandidateBound
@@ -130,15 +143,11 @@ Subproblem_Params MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_
                 continue;
 
             std::vector<Subproblem_Params> v;
-            //printProc("CandidateBound = " << CandidateBound << " LowerBound = " << LowerBound);
             if (std::abs(CandidateBound - LowerBound) > this->eps) { // epsilon criterion for convergence
                 v = Problem_Def.SplitSolution(prob, sol);
                 for (const auto &el : v)
                     LocalTaskQueue.push_back(el);
-            } else if (IsPotentialBestSolution) // if we cant and we have a good solution we send it to master
-            {
-                BestSubproblem = sol;
-            }
+	        }
         }
         // communication phase -----------------------------------------------------------------------------------------
         MPI_Iprobe(MPI_ANY_SOURCE, OneSided::MessageType::IDLE_PROC_WANTS_WORK, MPI_COMM_WORLD,
@@ -146,13 +155,14 @@ Subproblem_Params MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_
         if (IdleProcAsksForWork == 1) {
             NumMessages++;
             int target = st.MPI_SOURCE;
-            MPI_Recv(buffer, 0, MPI_CHAR, target, OneSided::MessageType::IDLE_PROC_WANTS_WORK,
+            MPI_Recv(buffer, 1, MPI_CHAR, target, OneSided::MessageType::IDLE_PROC_WANTS_WORK,
                      MPI_COMM_WORLD, &st);
             int queueSize = LocalTaskQueue.size();
-            int shareSize = std::min(static_cast<int>(queueSize * PercentageToShare), 50);
+            int shareSize = std::min(static_cast<int>(queueSize * PercentageToShare), 1);
             sendstreams[target].str("");
             sendstreams[target] << LocalBestBound << " ";
             sendstreams[target] << shareSize << " ";
+            std::vector<interval_MPI> packed;
             for (int i = 0; i < shareSize; i++) {
                 Subproblem_Params subprb;
                 if(this->mode == TraversalMode::DFS){
@@ -161,22 +171,75 @@ Subproblem_Params MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_
                     subprb = LocalTaskQueue.front(); LocalTaskQueue.pop_front();
                 }
                 encoder.Encode_Solution(sendstreams[target], subprb);
+                ///Problem_Def.PackData(subprb, packed);
             }
             assert(strlen(sendstreams[target].str().c_str()) < 20000);
+
             MPI_Issend(sendstreams[target].str().c_str(), strlen(sendstreams[target].str().c_str()), MPI_CHAR, target,
                        OneSided::MessageType::WORK_EXCHANGE, MPI_COMM_WORLD, &req2);
+            ///MPI_Issend(&packed[0], shareSize*6, UserType, target, OneSided::MessageType::WORK_EXCHANGE, MPI_COMM_WORLD, &req2);
             IdleProcAsksForWork = 0;
         }
+
+
+        // only send request if u are idle
+        if(LocalTaskQueue.empty())
+        {
+            if (!RequestSent){
+                char anything;
+                ProcWhomISend = (rand() % static_cast<int>( num ));
+                if (ProcWhomISend == pid) ProcWhomISend = (ProcWhomISend + 1) % num;
+                MPI_Issend(&anything, 1, MPI_CHAR, ProcWhomISend, OneSided::MessageType::IDLE_PROC_WANTS_WORK,
+                           MPI_COMM_WORLD, &workReq);
+                RequestSent = true;
+            } else {
+                int requestReceived = 0;
+                //MPI_Test(&workReq, &requestReceived, MPI_STATUS_IGNORE);
+                MPI_Iprobe(MPI_ANY_SOURCE, OneSided::MessageType::WORK_EXCHANGE, MPI_COMM_WORLD,
+                           &requestReceived, &st); // test if another processor has sent me a request
+                if (requestReceived == 1) {
+                    int size;
+                    ///std::vector<interval_MPI> receive_buf(1000);
+                    ///MPI_Recv(receive_buf.data(), 1000, UserType, ProcWhomISend, OneSided::MessageType::WORK_EXCHANGE,
+                    ///        MPI_COMM_WORLD, &throwAway);
+                    MPI_Recv(buffer, 100000, MPI_CHAR, st.MPI_SOURCE, OneSided::MessageType::WORK_EXCHANGE,
+                             MPI_COMM_WORLD, &throwAway);
+                    ///MPI_Get_count(&throwAway, UserType, &size);
+                    receivstream.str(buffer);
+
+                    Domain_Type CandidateBound;
+                    receivstream >> CandidateBound;
+                    if (((bool) goal && CandidateBound > LocalBestBound)
+                        || (!(bool) goal && CandidateBound < LocalBestBound)) {
+                        LocalBestBound = CandidateBound;
+                    }
+                    int numProblems;
+                    receivstream >> numProblems;
+                    ///Problem_Def.UnpackData(LocalTaskQueue, receive_buf, size);
+                    for(int i = 0; i < numProblems; i++)
+                    {
+                        Subproblem_Params subprb;
+                        encoder.Decode_Solution(receivstream, subprb);
+                        LocalTaskQueue.push_back(subprb);
+                    }
+
+                    RequestSent = false;
+                }
+            }
+
+        }
+
+
         counter++;
         if(BoundComm)
         {
             if ((counter % this->Communication_Frequency == 0) && !IallgatherOngoing) {
                 LocalBoundToShare = LocalBestBound;
-                MPI_Iallgather(&LocalBoundToShare, 1, type,
-                               BestBoundArray, 1, type, MPI_COMM_WORLD, &boundexchangeReq); // make it a vector
+                MPI_Iallgather(&LocalBoundToShare, 1, MPI_DOUBLE,
+                               BestBoundArray, 1, MPI_DOUBLE, MPI_COMM_WORLD, &boundexchangeReq); // make it a vector
                 IallgatherOngoing = true;
             }
-            if (IallgatherOngoing) {
+            else if (IallgatherOngoing) {
                 int flag = 0;
                 MPI_Test(&boundexchangeReq, &flag, MPI_STATUS_IGNORE);
                 if (flag == 1) {
@@ -204,7 +267,7 @@ Subproblem_Params MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_
                                IdleStatusArray, 1, MPI_INT, MPI_COMM_WORLD, &terminationReq); // make it a vector
                 IsTerminationAllgatherGoingOn = true;
             }
-            if (IsTerminationAllgatherGoingOn) {
+            else if (IsTerminationAllgatherGoingOn) {
                 int flag = 0;
                 MPI_Test(&terminationReq, &flag, MPI_STATUS_IGNORE);
                 if (flag == 1) {
@@ -220,48 +283,45 @@ Subproblem_Params MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_
                 }
             }
         }
-
-        // only send request if u are idle
-        if(!LocalTaskQueue.empty())
-            continue;
-
-        if (!RequestSent ){//and counter % this->Communication_Frequency == 0) {
-            char anything;
-            ProcWhomISend = (rand() % static_cast<int>( num ));
-            if (ProcWhomISend == pid) ProcWhomISend = (ProcWhomISend + 1) % num;
-            assert(ProcWhomISend != pid);
-            MPI_Issend(&anything, 0, MPI_CHAR, ProcWhomISend, OneSided::MessageType::IDLE_PROC_WANTS_WORK,
-                       MPI_COMM_WORLD, &workReq);
-            RequestSent = true;
-        } else {
-            int requestReceived;
-            MPI_Test(&workReq, &requestReceived, MPI_STATUS_IGNORE);
-            if (requestReceived == 1) {
-                MPI_Recv(buffer, 20000, MPI_CHAR, ProcWhomISend, OneSided::MessageType::WORK_EXCHANGE,
-                         MPI_COMM_WORLD, &throwAway);
-                receivstream.str(buffer);
-                Domain_Type CandidateBound;
-                receivstream >> CandidateBound;
-                if (((bool) goal && CandidateBound > LocalBestBound)
-                    || (!(bool) goal && CandidateBound < LocalBestBound)) {
-                    LocalBestBound = CandidateBound;
-                }
-                int numProblems;
-                receivstream >> numProblems;
-                //printProc("processor responded with " << numProblems << " so many problems");
-                for (int p = 0; p < numProblems; p++) {
-                    Subproblem_Params subprb;
-                    encoder.Decode_Solution(receivstream, subprb);
-                    LocalTaskQueue.push_back(subprb);
-                }
-                RequestSent = false;
-            }
-        }
     }
     MPI_Barrier(MPI_COMM_WORLD);
-    //Problem_Def.PrintSolution(BestSubproblem);
+    MPI_Type_free(&UserType);
 
-    printProc("i have sent " <<  NumMessages << " messages");
+
+
+
+    IdleProcAsksForWork = 0;
+    MPI_Iprobe(MPI_ANY_SOURCE, OneSided::MessageType::IDLE_PROC_WANTS_WORK, MPI_COMM_WORLD,
+               &IdleProcAsksForWork, &st); // test if another processor has sent me a request
+    if (IdleProcAsksForWork == 1){
+        printProc("before receive")
+        MPI_Recv(buffer, 1, MPI_CHAR, st.MPI_SOURCE, OneSided::MessageType::IDLE_PROC_WANTS_WORK,
+                 MPI_COMM_WORLD, &st);
+        printProc("received")
+    }
+
+
+    int requestReceived = 0;
+    MPI_Iprobe(MPI_ANY_SOURCE, OneSided::MessageType::WORK_EXCHANGE, MPI_COMM_WORLD,
+               &requestReceived, &st); // test if another processor has sent me a request
+    if (requestReceived == 1)
+    {
+        MPI_Recv(buffer, 100000, MPI_CHAR, st.MPI_SOURCE, OneSided::MessageType::WORK_EXCHANGE,
+                 MPI_COMM_WORLD, &throwAway);
+    }
+
+
+
+    // receive possible messages
+    if(req2 !=  MPI_REQUEST_NULL)
+        MPI_Request_free(&req2);
+    if(workReq !=  MPI_REQUEST_NULL)
+        MPI_Request_free(&workReq);
+    if(boundexchangeReq !=  MPI_REQUEST_NULL)
+        MPI_Request_free(&boundexchangeReq);
+
+
+    printProc("I have sent " <<  NumMessages << " messages and solved " << NumProblemsSolved << " problems" );
 
 
     // ------------------------ ALL procs have a best solution now master has to gather it

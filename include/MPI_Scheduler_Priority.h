@@ -65,6 +65,7 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
     std::stringstream receivstream("");
     receivstream << std::setprecision(15);
     Subproblem_Params BestSubproblem = Problem_Def.GetInitialSubproblem(prob);
+    int NumProblemsSolved = 0;
 
     if(pid == 0){
         BestSubproblem = DefaultMasterBehavior(sendstream, receivstream, Problem_Def, prob, encoder, goal, WorstBound);
@@ -96,6 +97,7 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
                 }
 
                 while(!LocalTaskQueue.empty()){
+	            NumProblemsSolved++;
                     //take out one element from queue, expand it
                     Subproblem_Params sol;
                     if(this->mode == TraversalMode::DFS){
@@ -112,7 +114,6 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
                     }
 
                     // try to make the bound better only if the solution lies in a feasible domain
-                    bool IsPotentialBestSolution = false;
                     auto Feasibility = Problem_Def.IsFeasible(prob, sol);
                     Domain_Type CandidateBound;
                     if (Feasibility == BnB::FEASIBILITY::FULL) {
@@ -120,7 +121,7 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
                         if (((bool) goal && CandidateBound >= LocalBestBound)
                             || (!(bool) goal && CandidateBound <= LocalBestBound)) {
                             LocalBestBound = CandidateBound;
-                            IsPotentialBestSolution = true;
+                            BestSubproblem = sol;
                         }
                     } else if(Feasibility == BnB::FEASIBILITY::PARTIAL){
                         // use our backup for the CandidateBound
@@ -135,9 +136,7 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
                         v = Problem_Def.SplitSolution(prob, sol);
                         for(const auto& el : v)
                             LocalTaskQueue.push_back(el);
-                    }else if(IsPotentialBestSolution){
-                        BestSubproblem = sol;
-                    }
+		            }
 
                     // request master for slaves
                     if(counter % this->Communication_Frequency == 0)
@@ -179,6 +178,7 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
                 MPI_Send(&sendstream.str()[0],10,MPI_CHAR,0,Default::MessageType::IDLE, MPI_COMM_WORLD);
             }
             else if(st.MPI_TAG == Default::MessageType::FINISH){
+		printProc("I have solved " << NumProblemsSolved << " problems");
                 break; // empty solution only master will return a meaningful solution
             }
         }

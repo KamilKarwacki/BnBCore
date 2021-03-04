@@ -47,6 +47,12 @@ namespace BnB
     enum class FEASIBILITY{FULL, PARTIAL, NONE};
 }
 
+
+struct interval_MPI
+{
+    double lower, upper;
+};
+
 // holds the functions that will perform actions on the subproblems
 template<typename Problem_Consts, typename Subproblem_Params, typename Domain_Type>
 class Problem_Definition
@@ -64,6 +70,11 @@ public:
     std::function<Domain_Type(const Problem_Consts&, const Subproblem_Params&)> GetContainedUpperBound = nullptr;
     // trivial function to display the solution
     std::function<void                            (const Subproblem_Params& params)> PrintSolution = nullptr;
+
+
+    /// EXPERIMENTAL maybe new class that user can implement
+    std::function<void(const Subproblem_Params&, std::vector<interval_MPI>&)> PackData = nullptr;
+    std::function<void(std::deque<Subproblem_Params>&, const std::vector<interval_MPI>&, int)> UnpackData = nullptr;
 };
 
 

@@ -62,9 +62,11 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
     TaskQueue.push_back(Problem_Def.GetInitialSubproblem(prob));
     Domain_Type BestBound = WorstBound;
     Subproblem_Params BestSubproblem;
+    int NumProblemsSolved = 0;
 
     while(!TaskQueue.empty())
     {
+	NumProblemsSolved++;
         Subproblem_Params sol;
         if(this->mode == TraversalMode::DFS){
             sol = TaskQueue.back(); TaskQueue.pop_back();
@@ -107,6 +109,7 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
         }if(IsPotentialBestSolution)
             BestSubproblem = sol;
     }
+    std::cout << "I have solved " << NumProblemsSolved << " problems" << std::endl;
     Problem_Def.PrintSolution(BestSubproblem);
     return BestSubproblem;
 }

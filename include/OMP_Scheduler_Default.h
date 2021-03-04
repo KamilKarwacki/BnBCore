@@ -2,6 +2,7 @@
 
 #include "OMP_Scheduler.h"
 
+int TaskWorkedOn = 0;
 
 template<typename Problem_Consts, typename Subproblem_Params, typename Domain_Type>
 class OMP_Scheduler_Default : public OMP_Scheduler<Problem_Consts, Subproblem_Params, Domain_Type>
@@ -23,8 +24,6 @@ private:
             const Subproblem_Params& subpr);
 };
 
-
-
 template<typename Problem_Consts, typename Subproblem_Params, typename Domain_Type>
 void OMP_Scheduler_Default<Problem_Consts, Subproblem_Params, Domain_Type>::DoTask(
         const Problem_Definition<Problem_Consts, Subproblem_Params, Domain_Type>& Problem_Def,
@@ -34,6 +33,7 @@ void OMP_Scheduler_Default<Problem_Consts, Subproblem_Params, Domain_Type>::DoTa
         Domain_Type& BestBound,
         const Subproblem_Params& subpr)
 {
+    TaskWorkedOn++;
     //ignore if its bound is worse than already known best sol.
     auto [LowerBound, UpperBound] = Problem_Def.GetEstimateForBounds(prob, subpr);
     if (((bool) goal && LowerBound < BestBound)
@@ -44,12 +44,15 @@ void OMP_Scheduler_Default<Problem_Consts, Subproblem_Params, Domain_Type>::DoTa
     // try to make the bound better
     auto Feasibility = Problem_Def.IsFeasible(prob, subpr);
     Domain_Type CandidateBound;
+    int prio = 0;
+
     if (Feasibility == BnB::FEASIBILITY::FULL) {
         CandidateBound = Problem_Def.GetContainedUpperBound(prob, subpr);
         #pragma omp critical
         {
             if (((bool) goal && CandidateBound >= BestBound)
                 || (!(bool) goal && CandidateBound <= BestBound)) {
+                prio = 100;
                 BestBound = CandidateBound;
                 BestSubproblem = subpr;
             }
@@ -60,26 +63,16 @@ void OMP_Scheduler_Default<Problem_Consts, Subproblem_Params, Domain_Type>::DoTa
     else if (Feasibility == BnB::FEASIBILITY::NONE)
         return;
 
-
-    if(std::abs(CandidateBound - LowerBound) > this->eps)
+    //printProc("BestBound= " << BestBound << " lowerBound= " << LowerBound);
+    double diff = std::abs(CandidateBound - LowerBound);
+    if(diff > this->eps)
     {
         std::vector<Subproblem_Params> result = Problem_Def.SplitSolution(prob, subpr);
-        if(this->mode == TraversalMode::DFS){
-            for(auto it = result.rbegin(); it != result.rend(); it++)
+        for(auto it = result.rbegin(); it != result.rend(); ++it)
+        {
+            #pragma omp task firstprivate(it) shared(BestSubproblem, BestBound) priority(prio)
             {
-                const auto r = *it;
-                #pragma omp task firstprivate(r) shared(BestSubproblem, BestBound)
-                {
-                    DoTask(Problem_Def, prob, goal, BestSubproblem, BestBound, r);
-                }
-            }
-        }else if( this->mode == TraversalMode::BFS){
-            for(const auto& r : result)
-            {
-                #pragma omp task firstprivate(r) shared(BestSubproblem, BestBound)
-                {
-                    DoTask(Problem_Def, prob, goal, BestSubproblem, BestBound, r);
-                }
+                DoTask(Problem_Def, prob, goal, BestSubproblem, BestBound, *it);
             }
         }
     }
@@ -98,7 +91,7 @@ Subproblem_Params OMP_Scheduler_Default<Problem_Consts, Subproblem_Params, Domai
     Subproblem_Params BestSubproblem;
     Subproblem_Params initial = Problem_Def.GetInitialSubproblem(prob);
 
-#pragma omp parallel shared(BestBound, BestSubproblem)
+#pragma omp parallel shared(BestBound, BestSubproblem) firstprivate(TaskWorkedOn)
     {
 #pragma omp single
         {
@@ -108,6 +101,7 @@ Subproblem_Params OMP_Scheduler_Default<Problem_Consts, Subproblem_Params, Domai
             }
         }
 #pragma omp taskwait
+    std::cout << "I have worked on " << TaskWorkedOn << " Tasks" << std::endl;
     }
     Problem_Def.PrintSolution(BestSubproblem);
     return BestSubproblem;
