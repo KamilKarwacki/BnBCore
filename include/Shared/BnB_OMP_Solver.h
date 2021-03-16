@@ -2,7 +2,8 @@
 #include <omp.h>
 #include "Base.h"
 #include "BnB_Solver.h"
-#include "OMP_Scheduler_Default.h"
+#include "OMP_Scheduler_Tasking.h"
+#include "OMP_Scheduler_Queue.h"
 
 template<typename Problem_Consts, typename Subproblem_Params, typename Domain_Type>
 class Solver_omp : public BnB_Solver<Problem_Consts, Subproblem_Params, Domain_Type>
@@ -21,7 +22,7 @@ private:
     size_t numThreads = 1;
 
     std::unique_ptr<OMP_Scheduler<Problem_Consts, Subproblem_Params, Domain_Type>> scheduler =
-            std::make_unique<OMP_Scheduler_Default<Problem_Consts, Subproblem_Params, Domain_Type>>();
+            std::make_unique<OMP_Scheduler_Tasking<Problem_Consts, Subproblem_Params, Domain_Type>>();
 };
 
 

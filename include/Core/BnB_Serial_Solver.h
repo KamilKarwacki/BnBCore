@@ -66,7 +66,7 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
 
     while(!TaskQueue.empty())
     {
-	NumProblemsSolved++;
+	    NumProblemsSolved++;
         Subproblem_Params sol;
         if(this->mode == TraversalMode::DFS){
             sol = TaskQueue.back(); TaskQueue.pop_back();

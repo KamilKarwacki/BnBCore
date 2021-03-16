@@ -1,12 +1,10 @@
 #pragma once
 
-#include <zconf.h>
 #include "Base.h"
+#include "MPI_Message_Encoder.h"
 
 // strategy pattern that holds the actual MPI algorithm to schedule the work
-
 namespace Default {enum MessageType{PROB = 0, GET_SLAVES = 1, DONE = 2, IDLE = 3, FINISH = 4};}
-enum class TraversalMode {DFS, BFS};
 
 template<typename Prob_Consts, typename Subproblem_Params, typename Domain_Type>
 class MPI_Scheduler

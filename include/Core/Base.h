@@ -78,6 +78,8 @@ public:
 };
 
 
+enum class TraversalMode {DFS, BFS};
+
 enum class Goal : bool {
     MAX = true,
     MIN = false
