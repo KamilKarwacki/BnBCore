@@ -26,8 +26,53 @@ namespace BnB::Knapsack {
     using Params = Subproblem_Parameters<
             std::vector<int>, // Taken objects
             int, // current weight
-            int // current value
+            int, // current value
+            float
     >;
+
+    std::tuple<float ,float> NewBoundAsInPaper(const Consts& consts, const Params& params)
+    {
+        // calculate the cost as if all items were to fit in the sack
+        int ObjectIndex = std::get<0>(params).size();
+        int sumWeight = std::get<1>(params);
+        int maxWeight = std::get<2>(consts);
+        float sumCost = std::get<2>(params);
+        int lastIndex = ObjectIndex;
+
+        /*
+        for(int i = ObjectIndex; i < std::get<0>(consts).size(); i++)
+        {
+           if(sumWeight == maxWeight)
+               break;
+           else if(sumWeight + std::get<0>(consts)[i] <= maxWeight){
+               sumCost += std::get<1>(consts)[i];
+               sumWeight += std::get<0>(consts)[i];
+           }else{
+               float factor =  static_cast<float>(maxWeight - sumWeight)/static_cast<float>(std::get<0>(consts)[lastIndex + 1]);
+               sumCost += std::get<1>(consts)[lastIndex + 1] * factor;
+               sumCost += 1;
+           }
+        }
+         */
+
+        for (int i = ObjectIndex; i < std::get<0>(consts).size() and sumWeight + std::get<0>(consts)[i] <= maxWeight; i++)
+        {
+            sumCost += std::get<1>(consts)[i];
+            sumWeight += std::get<0>(consts)[i];
+            lastIndex = i;
+        }
+
+        if(lastIndex + 1 != std::get<0>(consts).size())
+        {
+           float factor =  static_cast<float>(maxWeight - sumWeight)/static_cast<float>(std::get<0>(consts)[lastIndex + 1]);
+           sumCost += std::get<1>(consts)[lastIndex + 1] * factor;
+           sumCost += 1;
+        }
+
+        return std::tuple<float, float>(sumCost, -1);
+    }
+
+
 
 
     /*
@@ -42,30 +87,39 @@ namespace BnB::Knapsack {
 
 
 
-    Problem_Definition<Consts, Params, int> GenerateFasterProblem() {
+    Problem_Definition<Consts, Params, float> GenerateFasterProblem() {
         using namespace Detail;
         // object that will hold the functions called by the solver
-        Problem_Definition<Consts, Params, int> KnapsackProblem;
+        Problem_Definition<Consts, Params, float> KnapsackProblem;
 
         // you can assume that the subproblem is not feasible yet so it can be split
         KnapsackProblem.SplitSolution = [](const Consts &consts, const Params &params) {
+            if(std::get<0>(params).size() >= std::get<0>(consts).size()) return std::vector<Params>();
+            std::vector<Params> ret;
             int ObjectIndex = std::get<0>(params).size();
             Params s1 = params;
             Params s2 = params;
             std::get<0>(s1).push_back(0);
-            std::vector<Params> ret;
+            std::get<3>(s1) = std::get<0>(NewBoundAsInPaper(consts, s1));
             ret.push_back(s1); // without taking object at index pos
             if (std::get<0>(consts)[ObjectIndex] + std::get<1>(params) <= std::get<2>(consts)) {
                 std::get<1>(s2) += std::get<0>(consts)[ObjectIndex];
                 std::get<2>(s2) += std::get<1>(consts)[ObjectIndex];
                 std::get<0>(s2).push_back(1);
+                std::get<3>(s2) = std::get<0>(NewBoundAsInPaper(consts, s2));
                 ret.push_back(s2); // taking object at index pos
             }
+
             return ret;
         };
 
-        KnapsackProblem.GetEstimateForBounds = [](const Consts &consts, const Params &params) {
-            // calculate the cost as if all items were to fit in the sack
+        KnapsackProblem.GetEstimateForBounds = [](const Consts& consts, const Params& params){
+            return std::tuple(std::get<3>(params), -1);
+        }; //NewBoundAsInPaper;
+
+        /*
+                [](const Consts &consts, const Params &params) {
+            // calculate the cost as if all items were to fit in the sack[1] = {std::vector<int, std::allocator>}
 
             int ObjectIndex = std::get<0>(params).size();
             int sumCost = std::get<2>(params);
@@ -74,36 +128,51 @@ namespace BnB::Knapsack {
 
             return std::tuple<int, int>(sumCost, 0);
         };
+         */
 
         KnapsackProblem.GetContainedUpperBound = [](const Consts &consts, const Params &params) {
             int w = std::get<1>(params);
             int cost = std::get<2>(params);
 
-            int bound = cost;
-            for (int j = std::get<0>(params).size();
-                 j < std::get<0>(consts).size() && w + std::get<0>(consts)[j] <= std::get<2>(consts); j++) {
-                //taking items till weight is exceeded
-                bound += std::get<1>(consts)[j];
-                w += std::get<0>(consts)[j];
+            float bound = cost;
+           /*
+            for (int j = std::get<0>(params).size(); j < std::get<0>(consts).size(); j++) {
+                if(w == std::get<2>(consts))
+                    break;
+                else if(w + std::get<0>(consts)[j] <= std::get<2>(consts))
+                {
+                    bound += std::get<1>(consts)[j];
+                    w += std::get<0>(consts)[j];
+                }
             }
-            return bound;
+*/
+            for (int j = std::get<0>(params).size(); j < std::get<0>(consts).size() and w + std::get<0>(consts)[j] <= std::get<2>(consts); j++) {
+                    bound += std::get<1>(consts)[j];
+                    w += std::get<0>(consts)[j];
+             }
+
+
+            return  bound;
         };
 
         KnapsackProblem.IsFeasible = [](const Consts &consts, const Params &params) {
-            return std::get<0>(consts).size() != std::get<0>(params).size() ? BnB::FEASIBILITY::PARTIAL : BnB::FEASIBILITY::FULL;
+           // return std::get<0>(consts).size() != std::get<0>(params).size() ? BnB::FEASIBILITY::PARTIAL : BnB::FEASIBILITY::FULL;
+           return std::get<1>(params) > std::get<2>(consts) ? BnB::FEASIBILITY::NONE : BnB::FEASIBILITY::FULL;
         };
 
 
         KnapsackProblem.PrintSolution = [](const Params &params) {
-            printProc("solution has " << std::get<0>(params).size() << " items");
+            printProc("solution has " << std::get<0>(params).size() << " items with weight " << std::get<1>(params) << " and value " << std::get<2>(params));
 
             for (const auto &el : std::get<0>(params)) {
-                std::cout << "item nr: " << el << std::endl;
+               // std::cout << "item nr: " << el << std::endl;
             }
         };
 
         KnapsackProblem.GetInitialSubproblem = [](const Consts &prob) {
-            return Params();
+            Params Initial;
+            std::get<3>(Initial) = std::get<0>(NewBoundAsInPaper(prob, Params()));
+            return Initial;
         };
 
         return KnapsackProblem;
@@ -191,10 +260,10 @@ namespace BnB::Knapsack {
 
 
         KnapsackProblem.PrintSolution = [](const Params &params) {
-            printProc("solution has " << std::get<0>(params).size() << " items");
+            printProc("solution has " << std::get<0>(params).size() << " items with weight " << std::get<1>(params) << " and value " << std::get<2>(params));
 
             for (const auto &el : std::get<0>(params)) {
-                std::cout << "item nr: " << el << std::endl;
+                //std::cout << "item nr: " << el << std::endl;
             }
         };
 
@@ -211,11 +280,10 @@ namespace BnB::Knapsack {
 
 
     std::tuple<std::vector<int>, std::vector<int>, int>
-            GenerateRandomProblemConstants(std::pair<int,int> range, int size, double fitpercentage = 0.5)
+            GenerateRandomProblemConstants(std::pair<int,int> range, int size, int seed, double fitpercentage = 0.5)
     {
         // random engine
-        std::random_device rd;
-        std::mt19937 mt(1);
+        std::mt19937 mt(seed);
         std::uniform_int_distribution<int> dist(range.first, range.second);
 
         // knapsack consts
@@ -232,6 +300,30 @@ namespace BnB::Knapsack {
         return {weights, values, (int)sum*fitpercentage};
     }
 
+    std::tuple<std::vector<int>, std::vector<int>, int>
+            GenerateCorrelatedProblemConstants(std::pair<int, int> range, int size, int seed, double fitpercentage = 0.5)
+    {
+        std::mt19937 mt(seed);
+        std::uniform_int_distribution<int> dist(range.first, range.second);
+
+        // knapsack consts
+        std::vector<int> weights;
+        std::vector<int> values;
+
+        int sum = 0;
+        while(weights.size() != size){
+            int weight = dist(mt);
+            int cost = dist(mt);
+            if(std::abs(static_cast<float>(weight) / static_cast<float>(cost) - 1.0) < 0.1 ) // check the correlation
+            {
+                weights.push_back(weight);
+                values.push_back(cost);
+                sum += weight;
+            }
+        }
+
+        return {weights, values, (int)sum*fitpercentage};
+    }
 }
 
 

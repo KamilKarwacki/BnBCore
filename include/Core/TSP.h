@@ -4,14 +4,14 @@
 
 // factory function that returns a TSP problem definition
 // used for testing solvers, and as an example of how to use the library
-
+/*
 namespace BnB::TSP {
-    using Consts = Problem_Constants<
+    using Consts = BnB::Problem_Constants<
             std::vector<int>, // connectivity Matrix
             int, // root node
             int>; // node count
 
-    using Params = Subproblem_Parameters<
+    using Params = BnB::Subproblem_Parameters<
             std::vector<int>, // list of traveled nodes
             int // current value
     >;
@@ -43,13 +43,13 @@ namespace BnB::TSP {
 
         TSPProblem.GetEstimateForBounds = [](const Consts &consts, const Params &params) {
             // calculate the cost as if all items were to fit in the sack
-/*
+
             int ObjectIndex = std::get<0>(params).size();
             int sumCost = 1;
             for (int i = ObjectIndex; i < std::get<0>(consts).size(); i++)
                 sumCost += std::get<1>(consts)[i];
 
-    */
+
             return std::tuple<int, int>(1, 0);
         };
 
@@ -78,4 +78,4 @@ namespace BnB::TSP {
 
         return TSPProblem;
     }
-}
+}*/

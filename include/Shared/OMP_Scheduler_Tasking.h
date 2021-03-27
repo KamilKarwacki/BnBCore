@@ -2,7 +2,6 @@
 
 #include "OMP_Scheduler.h"
 
-int TaskWorkedOn = 0;
 
 template<typename Problem_Consts, typename Subproblem_Params, typename Domain_Type>
 class OMP_Scheduler_Tasking: public OMP_Scheduler<Problem_Consts, Subproblem_Params, Domain_Type>
@@ -22,6 +21,8 @@ private:
             Subproblem_Params& BestSubproblem,
             Domain_Type& BestBound,
             const Subproblem_Params& subpr);
+
+    int TasksWorkedOn = 0;
 };
 
 template<typename Problem_Consts, typename Subproblem_Params, typename Domain_Type>
@@ -33,8 +34,8 @@ void OMP_Scheduler_Tasking<Problem_Consts, Subproblem_Params, Domain_Type>::DoTa
         Domain_Type& BestBound,
         const Subproblem_Params& subpr)
 {
-#pragma omp atomic
-    TaskWorkedOn++;
+    #pragma atomic
+    TasksWorkedOn++;
     //ignore if its bound is worse than already known best sol.
     auto [LowerBound, UpperBound] = Problem_Def.GetEstimateForBounds(prob, subpr);
     if (((bool) goal && LowerBound < BestBound)
@@ -70,7 +71,7 @@ void OMP_Scheduler_Tasking<Problem_Consts, Subproblem_Params, Domain_Type>::DoTa
         //for(auto it = result.rbegin(); it != result.rend(); ++it)
         for(const auto& r : result)
         {
-            #pragma omp task firstprivate(r) shared(BestSubproblem, BestBound) priority(int(1/TaskWorkedOn*1000))
+            #pragma omp task firstprivate(r) shared(BestSubproblem, BestBound) //priority(int(1/TaskWorkedOn*1000))
             {
                 DoTask(Problem_Def, prob, goal, BestSubproblem, BestBound, r);
             }
@@ -91,7 +92,7 @@ Subproblem_Params OMP_Scheduler_Tasking<Problem_Consts, Subproblem_Params, Domai
     Subproblem_Params BestSubproblem;
     Subproblem_Params initial = Problem_Def.GetInitialSubproblem(prob);
 
-#pragma omp parallel shared(BestBound, BestSubproblem) firstprivate(TaskWorkedOn)
+#pragma omp parallel shared(BestBound, BestSubproblem)
     {
 #pragma omp single
         {
@@ -101,7 +102,7 @@ Subproblem_Params OMP_Scheduler_Tasking<Problem_Consts, Subproblem_Params, Domai
             }
         }
 #pragma omp taskwait
-    std::cout << "I have worked on " << TaskWorkedOn << " Tasks" << std::endl;
+        printProc("I have worked on " << TasksWorkedOn << " Tasks");
     }
     Problem_Def.PrintSolution(BestSubproblem);
     return BestSubproblem;

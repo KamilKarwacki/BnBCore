@@ -6,7 +6,7 @@ option(BUILD_WITH_OMP
 		"Whether to build with MPI (to run on a cluster)" ON)
 option(BUILD_WITH_MPI 
 		"Whether to build with OMP (to run in parallel on a single machine)" ON)
-option(PACKAGE_TESTING "Build the tests" ON)
+option(PACKAGE_TESTING "Build the tests" OFF)
 
 # our only target, a header only library (INTERFACE)
 add_library("${PROJECT_NAME}" INTERFACE)
@@ -32,6 +32,10 @@ if(PACKAGE_TESTING)
 	add_subdirectory(tests)
 endif()
 # ------------------------------------
+
+add_subdirectory(extern/simplex)
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+target_link_libraries(${PROJECT_NAME} INTERFACE Eigen3::Eigen)
 
 target_include_directories(
 		${PROJECT_NAME}

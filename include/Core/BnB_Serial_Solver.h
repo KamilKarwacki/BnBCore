@@ -58,8 +58,13 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
         const Goal goal,
         const Domain_Type WorstBound)
 {
+    ///auto cmp = [](Subproblem_Params p1, Subproblem_Params p2)
+   ///{return std::get<3>(p1) < std::get<3>(p2);};
+   ///std::priority_queue<Subproblem_Params, std::vector<Subproblem_Params>, decltype(cmp)> TaskQueue(cmp);
+    ///TaskQueue.push(Problem_Def.GetInitialSubproblem(prob));
     std::deque<Subproblem_Params> TaskQueue;
     TaskQueue.push_back(Problem_Def.GetInitialSubproblem(prob));
+
     Domain_Type BestBound = WorstBound;
     Subproblem_Params BestSubproblem;
     int NumProblemsSolved = 0;
@@ -68,11 +73,15 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
     {
 	    NumProblemsSolved++;
         Subproblem_Params sol;
+
         if(this->mode == TraversalMode::DFS){
             sol = TaskQueue.back(); TaskQueue.pop_back();
         }else if( this->mode == TraversalMode::BFS){
             sol = TaskQueue.front(); TaskQueue.pop_front();
         }
+
+
+       ///sol = TaskQueue.top(); TaskQueue.pop();
 
 
         //ignore if its bound is worse than already known best sol.
@@ -101,11 +110,12 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
             continue;
 
         std::vector<Subproblem_Params> v;
-        // TODO try to pass the bound dfference to split func to calcualte the priority
+        // TODO try to pass the bound difference to split func to calculate the priority
         if(std::abs(CandidateBound - LowerBound) > this->Eps){ // epsilon criterion for convergence
             v = Problem_Def.SplitSolution(prob, sol);
-            for(const auto& el : v)
+            for(auto&& el : v)
                 TaskQueue.push_back(el);
+                ///TaskQueue.push(el);
         }if(IsPotentialBestSolution)
             BestSubproblem = sol;
     }

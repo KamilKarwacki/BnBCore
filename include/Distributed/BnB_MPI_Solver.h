@@ -6,7 +6,7 @@
 #include "BnB_Solver.h"
 #include "Base.h"
 
-enum class Scheduler_Type{ DEFAULT, PRIORITY, HYBRID, ONESIDED,};
+enum class MPI_Scheduler_Type{PRIORITY, HYBRID, ONESIDED,};
 
 // main solver class has to be initiated by the user
 // Problem_Consts    -- should be an std::tuple holding constants of the problem
@@ -16,12 +16,13 @@ template<typename Problem_Consts, typename Subproblem_Params, typename Domain_Ty
 class Solver_MPI : public BnB_Solver<Problem_Consts, Subproblem_Params, Domain_Type>
 {
 public:
+
     // maximizes a problem defines by the user
     Subproblem_Params Maximize(const Problem_Definition<Problem_Consts, Subproblem_Params, Domain_Type>&, const Problem_Consts&);
     // minimizes a problem defined by the user
     Subproblem_Params Minimize(const Problem_Definition<Problem_Consts, Subproblem_Params, Domain_Type>&, const Problem_Consts&);
     // if not called default scheduler will be used
-    void SetScheduler(Scheduler_Type);
+    void SetScheduler(MPI_Scheduler_Type Scheduler);
     // set frequency of worker to master communication
     auto SetSchedulerParameters() {return scheduler.get();}
 
@@ -55,16 +56,16 @@ Subproblem_Params Solver_MPI<Problem_Consts, Subproblem_Params, Domain_Type>::Mi
 }
 
 template<typename Problem_Consts, typename Subproblem_Params, typename Domain_Type>
-void Solver_MPI<Problem_Consts, Subproblem_Params, Domain_Type>::SetScheduler(Scheduler_Type type)
+void Solver_MPI<Problem_Consts, Subproblem_Params, Domain_Type>::SetScheduler(MPI_Scheduler_Type type)
 {
     switch(type){
-        case Scheduler_Type::PRIORITY:
+        case MPI_Scheduler_Type::PRIORITY:
             scheduler = std::make_unique<MPI_Scheduler_Priority<Problem_Consts, Subproblem_Params, Domain_Type>>();
             break;
-        case Scheduler_Type::HYBRID:
+        case MPI_Scheduler_Type::HYBRID:
             scheduler = std::make_unique<MPI_Scheduler_Hybrid<Problem_Consts, Subproblem_Params, Domain_Type>>();
             break;
-        case Scheduler_Type::ONESIDED:
+        case MPI_Scheduler_Type::ONESIDED:
             scheduler = std::make_unique<MPI_Scheduler_OneSided<Problem_Consts, Subproblem_Params, Domain_Type>>();
             break;
     }

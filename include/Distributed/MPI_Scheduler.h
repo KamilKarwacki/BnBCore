@@ -49,7 +49,6 @@ Subproblem_Params DefaultMasterBehavior(std::stringstream& sendstream,
     MPI_Status st;
 
     int NumMessages = 0;
-    printProc("the domain is " << std::get<0>(prob).size() << " dimensional and the domain is " << std::get<0>(prob)[0]);
 
     Domain_Type GlobalBestBound = WorstBound;
     //master processor

@@ -23,7 +23,7 @@ void TestResult(std::vector<int> result, std::vector<int> costs, int target)
 TEST(MPIKnapsack, someItemsFit)
 {
 	Solver_MPI<BnB::Knapsack::Consts, BnB::Knapsack::Params, int> solver;
-	solver.SetScheduler(Scheduler_Type::DEFAULT);
+	solver.SetScheduler(MPI_Scheduler_Type::DEFAULT);
 
 	BnB::Knapsack::Consts TestConsts;
 	std::get<0>(TestConsts) = {3,3,3,3,3};
