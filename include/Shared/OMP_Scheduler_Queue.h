@@ -113,6 +113,15 @@ void OMP_Scheduler_Queue<Problem_Consts, Subproblem_Params, Domain_Type>::Thread
     if (std::abs(CandidateBound - LowerBound) > this->eps) {
         v = Problem_Def.SplitSolution(prob, task);
         for (auto &&el : v) {
+
+            auto[lower, upper] = Problem_Def.GetEstimateForBounds(prob, task);
+            if (((bool) goal && lower < CurrentBestBound)
+                || (!(bool) goal && upper > CurrentBestBound)) {
+                TasksEliminated++;
+                std::cout << "eliminated" << std::endl;
+                continue;
+            }
+
             omp_set_lock(&QueueLock);
             GlobalTaskQueue.push_back(el);
             omp_unset_lock(&QueueLock);

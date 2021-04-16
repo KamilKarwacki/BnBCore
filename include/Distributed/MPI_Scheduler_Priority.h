@@ -55,12 +55,14 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
                                                                                  const Goal goal,
                                                                                  const Domain_Type WorstBound)
 {
-    int PackageSize = 10;
+    int PackageSize = 1;
+    bool RequestOngoing = false;
     int pid, num;
     MPI_Comm_rank(MPI_COMM_WORLD, &pid);
     MPI_Comm_size(MPI_COMM_WORLD, &num);
     assert(num >= 3 && "this implementation needs at least 3 cores");
     MPI_Status st;
+    MPI_Request SlaveReq;
     std::vector<MPI_Request> req(num);
     std::vector<std::stringstream> sendstreams(num);
     for(auto& stream : sendstreams)
@@ -148,50 +150,60 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
                     }
 
                     // request master for slaves
-                    if(counter % this->Communication_Frequency == 0)
-                    {
+                    if(counter % this->Communication_Frequency == 0 and !RequestOngoing) {
                         counter = 0;
                         sendstreams[0].str("");
                         sendstreams[0] << LocalBestBound << " ";
-                        sendstreams[0] << (int)LocalTaskQueue.size() << " ";
-                        MPI_Send(&sendstreams[0].str()[0],strlen(sendstreams[0].str().c_str()),MPI_CHAR,0,Default::MessageType::GET_SLAVES,MPI_COMM_WORLD);
+                        sendstreams[0] << (int) LocalTaskQueue.size() << " ";
+                        MPI_Isend(&sendstreams[0].str()[0], strlen(sendstreams[0].str().c_str()), MPI_CHAR, 0,
+                                  Default::MessageType::GET_SLAVES, MPI_COMM_WORLD, &SlaveReq);
+                        RequestOngoing = true;
+                    }
 
-                        //get master's response
-                        MPI_Recv(buffer,200, MPI_CHAR, 0, Default::MessageType::GET_SLAVES, MPI_COMM_WORLD, &st);
-                        receivstream.str(buffer);
-                        int slaves_avbl;
-                        receivstream >> LocalBestBound;
-                        receivstream >> slaves_avbl;
 
-                        for(int i=0; i<slaves_avbl; i++){
-                            //give a problem to each slave
-                            int sl_no;
-                            receivstream >> sl_no;
-                            sendstreams[sl_no].str("");
-                            int RestSize = std::min(PackageSize, (int)LocalTaskQueue.size());
-                            if(RestSize == 0) continue;
-                            sendstreams[sl_no] << RestSize << " ";
-                            for(int j = 0; j < RestSize; j++){
-                                Subproblem_Params SubProb;
+                    if(RequestOngoing) {
+                        int flag = 0;
+                        MPI_Test(&SlaveReq, &flag, MPI_STATUS_IGNORE);
+                        if(flag == 1) {
+                            RequestOngoing = false;
+                            //get master's response
+                            MPI_Recv(buffer,200, MPI_CHAR, 0, Default::MessageType::GET_SLAVES, MPI_COMM_WORLD, &st);
+                            receivstream.str(buffer);
+                            int slaves_avbl;
+                            receivstream >> LocalBestBound;
+                            receivstream >> slaves_avbl;
 
-                                ///if(this->mode == TraversalMode::DFS){
-                                ///    SubProb = LocalTaskQueue.back(); LocalTaskQueue.pop_back();
-                                ///}else if( this->mode == TraversalMode::BFS){
+                            for(int i=0; i<slaves_avbl; i++){
+                                //give a problem to each slave
+                                int sl_no;
+                                receivstream >> sl_no;
+                                sendstreams[sl_no].str("");
+                                int RestSize = std::min(PackageSize, (int)LocalTaskQueue.size());
+                                if(RestSize == 0) continue;
+                                sendstreams[sl_no] << RestSize << " ";
+                                for(int j = 0; j < RestSize; j++){
+                                    Subproblem_Params SubProb;
+
+                                    ///if(this->mode == TraversalMode::DFS){
+                                    ///    SubProb = LocalTaskQueue.back(); LocalTaskQueue.pop_back();
+                                    ///}else if( this->mode == TraversalMode::BFS){
                                     SubProb = LocalTaskQueue.front(); LocalTaskQueue.pop_front();
-                                ///}
+                                    ///}
 
-                                /*auto[lower, upper] = Problem_Def.GetEstimateForBounds(prob, sol);
-                                if (((bool) goal && lower< LocalBestBound)
-                                    || (!(bool) goal && lower> LocalBestBound))
-                                    continue;*/
-                                encoder.Encode_Solution(sendstreams[sl_no], SubProb);
+                                    /*auto[lower, upper] = Problem_Def.GetEstimateForBounds(prob, sol);
+                                    if (((bool) goal && lower< LocalBestBound)
+                                        || (!(bool) goal && lower> LocalBestBound))
+                                        continue;*/
+                                    encoder.Encode_Solution(sendstreams[sl_no], SubProb);
+                                }
+                                sendstreams[sl_no] << LocalBestBound<< " ";
+                                //send it to idle processor
+                                MPI_Isend(&sendstreams[sl_no].str()[0],strlen(sendstreams[sl_no].str().c_str()), MPI_CHAR, sl_no,
+                                          Default::MessageType::PROB, MPI_COMM_WORLD, &req[sl_no]);
                             }
-                            sendstreams[sl_no] << LocalBestBound<< " ";
-                            //send it to idle processor
-                            MPI_Isend(&sendstreams[sl_no].str()[0],strlen(sendstreams[sl_no].str().c_str()), MPI_CHAR, sl_no,
-                                    Default::MessageType::PROB, MPI_COMM_WORLD, &req[sl_no]);
                         }
                     }
+
                     counter++;
                 }
                 //This slave has now become idle (its queue is empty). Inform master.
