@@ -72,7 +72,8 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
 
     time_point<high_resolution_clock> start, end;
 
-
+    time_point<high_resolution_clock> start2, end2;
+    start2 = high_resolution_clock::now();
     while(!TaskQueue.empty())
     {
 	    NumProblemsSolved++;
@@ -120,13 +121,17 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
         // TODO try to pass the bound difference to split func to calculate the priority
         if(std::abs(CandidateBound - LowerBound) > this->Eps){ // epsilon criterion for convergence
             v = Problem_Def.SplitSolution(prob, sol);
-            for(auto&& el : v)
-                TaskQueue.push_back(el);
+            std::move(std::begin(v), std::end(v), std::back_inserter(TaskQueue));
+            ///for(auto&& el : v)
+              ///  TaskQueue.push_back(el);
         }if(IsPotentialBestSolution)
             BestSubproblem = sol;
         end = high_resolution_clock::now();
         timings[2] += duration_cast<nanoseconds>(end - start).count()/1.0e9;
     }
+    end2 = high_resolution_clock::now();
+    std::cout << "!!!!!!!!!!!!!" << duration_cast<nanoseconds>(end2 - start2).count()/1.0e9 << std::endl;
+
     std::cout << "I have solved " << NumProblemsSolved << " problems" << std::endl;
     std::cout << "and eliminated " << ProblemsEliminated << " problems" << std::endl;
     std::cout << "the three zones took "  << timings[0] << " " << timings[1] << " " << timings[2] << std::endl;
