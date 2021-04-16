@@ -66,9 +66,20 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
     int NumProblemsSolved = 0;
     int ProblemsEliminated = 0;
 
+    std::vector<double> timings(4);
+    using namespace std::chrono;
+
+
+    time_point<system_clock> start, end;
+
+
+
+
     while(!TaskQueue.empty())
     {
 	    NumProblemsSolved++;
+	    start = system_clock::now();
+
         Subproblem_Params sol = GetNextSubproblem(TaskQueue, this->mode);
 
         //ignore if its bound is worse than already known best sol.
@@ -76,8 +87,14 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
         if (((bool) goal && LowerBound < BestBound)
             || (!(bool) goal && LowerBound > BestBound)) {
             ProblemsEliminated++;
+            end = system_clock::now();
+            timings[0] += duration_cast<milliseconds>(end - start).count()/1000.0;
             continue;
         }
+
+
+        end = system_clock::now();
+        timings[0] += duration_cast<milliseconds>(end - start).count()/1000.0;
 
         // try to make the bound better only if the solution lies in a feasible domain
         bool IsPotentialBestSolution = false;
@@ -97,6 +114,10 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
         else if (Feasibility == BnB::FEASIBILITY::NONE) // basically discard again
             continue;
 
+
+        start = system_clock::now();
+        timings[1] += duration_cast<milliseconds>(start - end).count()/1000.0;
+
         std::vector<Subproblem_Params> v;
         // TODO try to pass the bound difference to split func to calculate the priority
         if(std::abs(CandidateBound - LowerBound) > this->Eps){ // epsilon criterion for convergence
@@ -105,9 +126,12 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
                 TaskQueue.push_back(el);
         }if(IsPotentialBestSolution)
             BestSubproblem = sol;
+        end = system_clock::now();
+        timings[2] += duration_cast<milliseconds>(end - start).count()/1000.0;
     }
     std::cout << "I have solved " << NumProblemsSolved << " problems" << std::endl;
     std::cout << "and eliminated " << ProblemsEliminated << " problems" << std::endl;
+    std::cout << "the three zones took "  << timings[0] << " " << timings[1] << " " << timings[2] << std::endl;
     Problem_Def.PrintSolution(BestSubproblem);
     return BestSubproblem;
 }

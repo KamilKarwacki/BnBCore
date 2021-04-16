@@ -181,7 +181,13 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
                                 int RestSize = std::min(PackageSize, (int)LocalTaskQueue.size());
                                 if(RestSize == 0) continue;
                                 sendstreams[sl_no] << RestSize << " ";
-                                for(int j = 0; j < RestSize; j++){
+                                int ProblemsInBuffer = 0;
+                                while(ProblemsInBuffer != RestSize){
+                                    if(LocalTaskQueue.empty()){
+                                        sendstreams[sl_no].str("");
+                                        sendstreams[sl_no] << 0 << " ";
+                                        break;
+                                    }
                                     Subproblem_Params SubProb;
 
                                     ///if(this->mode == TraversalMode::DFS){
@@ -190,11 +196,14 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
                                     SubProb = LocalTaskQueue.front(); LocalTaskQueue.pop_front();
                                     ///}
 
-                                    /*auto[lower, upper] = Problem_Def.GetEstimateForBounds(prob, sol);
-                                    if (((bool) goal && lower< LocalBestBound)
-                                        || (!(bool) goal && lower> LocalBestBound))
-                                        continue;*/
+                                    auto[lower, upper] = Problem_Def.GetEstimateForBounds(prob, SubProb);
+                                    if (((bool) goal && lower < LocalBestBound)
+                                        || (!(bool) goal && lower > LocalBestBound)){
+                                        continue;
+                                    }
                                     encoder.Encode_Solution(sendstreams[sl_no], SubProb);
+                                    ProblemsInBuffer++;
+
                                 }
                                 sendstreams[sl_no] << LocalBestBound<< " ";
                                 //send it to idle processor
