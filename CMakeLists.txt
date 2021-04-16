@@ -33,9 +33,10 @@ if(PACKAGE_TESTING)
 endif()
 # ------------------------------------
 
-add_subdirectory(extern/simplex)
-find_package(Eigen3 3.3 REQUIRED NO_MODULE)
-target_link_libraries(${PROJECT_NAME} INTERFACE Eigen3::Eigen)
+#add_subdirectory(extern/lp_solve_5.5)
+#target_link_libraries(${PROJECT_NAME} INTERFACE LP)
+#find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+#target_link_libraries(${PROJECT_NAME} INTERFACE Eigen3::Eigen)
 
 target_include_directories(
 		${PROJECT_NAME}

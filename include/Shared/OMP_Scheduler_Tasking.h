@@ -34,7 +34,7 @@ void OMP_Scheduler_Tasking<Problem_Consts, Subproblem_Params, Domain_Type>::DoTa
         Domain_Type& BestBound,
         const Subproblem_Params& subpr)
 {
-    #pragma atomic
+    #pragma omp atomic
     TasksWorkedOn++;
     //ignore if its bound is worse than already known best sol.
     auto [LowerBound, UpperBound] = Problem_Def.GetEstimateForBounds(prob, subpr);
@@ -46,16 +46,16 @@ void OMP_Scheduler_Tasking<Problem_Consts, Subproblem_Params, Domain_Type>::DoTa
     // try to make the bound better
     auto Feasibility = Problem_Def.IsFeasible(prob, subpr);
     Domain_Type CandidateBound;
-
-    if (Feasibility == BnB::FEASIBILITY::FULL) {
+    bool IsPotentialCandidate = false;
+    if (Feasibility == BnB::FEASIBILITY::Full) {
         CandidateBound = Problem_Def.GetContainedUpperBound(prob, subpr);
-        #pragma omp critical
+#pragma omp critical
         {
             if (((bool) goal && CandidateBound >= BestBound)
                 || (!(bool) goal && CandidateBound <= BestBound)) {
-                BestBound = CandidateBound;
-                BestSubproblem = subpr;
-            }
+                	BestBound = CandidateBound;
+                    IsPotentialCandidate = true;
+            	}
         }
     }else if(Feasibility == BnB::FEASIBILITY::PARTIAL){
         CandidateBound = UpperBound;
@@ -63,20 +63,24 @@ void OMP_Scheduler_Tasking<Problem_Consts, Subproblem_Params, Domain_Type>::DoTa
     else if (Feasibility == BnB::FEASIBILITY::NONE)
         return;
 
-    //printProc("BestBound= " << BestBound << " lowerBound= " << LowerBound);
     double diff = std::abs(CandidateBound - LowerBound);
     if(diff > this->eps)
     {
         std::vector<Subproblem_Params> result = Problem_Def.SplitSolution(prob, subpr);
-        //for(auto it = result.rbegin(); it != result.rend(); ++it)
         for(const auto& r : result)
         {
-            #pragma omp task firstprivate(r) shared(BestSubproblem, BestBound) //priority(int(1/TaskWorkedOn*1000))
+            #pragma omp task firstprivate(r) shared(BestSubproblem, BestBound, Problem_Def, prob, goal) //priority(int(LowerBound))
             {
                 DoTask(Problem_Def, prob, goal, BestSubproblem, BestBound, r);
             }
         }
+    }else if(IsPotentialCandidate){
+#pragma omp critical
+        {
+            BestSubproblem = subpr;
+        }
     }
+
 }
 
 

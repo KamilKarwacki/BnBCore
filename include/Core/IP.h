@@ -1,9 +1,6 @@
 #pragma once
 
 #include "Base.h"
-#include "solver.hpp"
-#include "eigen.hpp"
-#include <Eigen/Dense>
 
 // factory function that returns a LP problem definition
 // used for testing solvers, and as an example of how to use the library
@@ -27,8 +24,6 @@ namespace BnB::IP{
     namespace Detail{
         auto SolveWithSimplex(const Consts& consts, const Params& params)
         {
-            using namespace simplex_lib;
-            using EigenSolver = Solver<Eigen::MatrixXd>;
 
             // build extended problem;
             std::vector<std::vector<double>> A_ext = std::get<0>(consts);
@@ -43,22 +38,11 @@ namespace BnB::IP{
             }
 
 
-            Eigen::MatrixXd constraints(A_ext.size(), A_ext[0].size() + 1);
-            Eigen::VectorXd objectiveFunction(c.size());
 
-            // copy stuff to eigen
-            for(int i = 0; i < A_ext.size(); i++){
-                for(int j = 0; j < A_ext[0].size(); j++){
-                    constraints(i, j) = A_ext[i][j];
-                }
-                constraints(i, A_ext[0].size()) =  b_ext[i];
-            }
-            for(int i = 0; i < c.size(); i++)
-                objectiveFunction(i) = c[i];
 
-            // solve
-            return EigenSolver(EigenSolver::MODE_MAXIMIZE, objectiveFunction, constraints);
+            return 123;
         }
+/*
         auto Split(bool lower, const Consts& consts, const Params& params)
         {
             std::vector<std::vector<double>> NewConditions(std::get<0>(params)); // copy old conditions from the root
@@ -93,7 +77,7 @@ namespace BnB::IP{
 
             // solve the new node
             auto RelaxedSolution = Detail::SolveWithSimplex(consts, FirstCase);
-            std::get<4>(FirstCase) = RelaxedSolution.hasSolution() == simplex_lib::Solver<Eigen::MatrixXd>::SOL_FOUND;
+            std::get<4>(FirstCase) = RelaxedSolution.hasSolution() ==
             if(!std::get<4>(FirstCase)) return FirstCase;
             // find which point shall be split next
             int max = -1;
@@ -114,12 +98,14 @@ namespace BnB::IP{
             std::get<2>(FirstCase) = max_ind;
             assert(max_ind != -1 and std::get<4>(FirstCase));
             return FirstCase;
-        }
-    };
+        }*/
+    }
 
     Problem_Definition<Consts, Params, double> GenerateToyProblem() {
         // object that will hold the functions called by the solver
         Problem_Definition<Consts, Params, double> LPProblem;
+        /*
+
 
         // you can assume that the subproblem is not feasible yet so it can be split
         LPProblem.SplitSolution = [](const Consts &consts, const Params &params) {
@@ -152,7 +138,7 @@ namespace BnB::IP{
 
         LPProblem.IsFeasible = [](const Consts &consts, const Params &params) {
             if(std::get<4>(params))
-                return FEASIBILITY::FULL;
+                return FEASIBILITY::Full;
             else return FEASIBILITY::NONE;
         };
 
@@ -191,7 +177,7 @@ namespace BnB::IP{
 
             return params;
         };
-
+        */
         return LPProblem;
     }
 }

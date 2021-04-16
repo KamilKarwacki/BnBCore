@@ -5,20 +5,18 @@
 #include "OMP_Scheduler_Tasking.h"
 #include "OMP_Scheduler_Queue.h"
 
-
+// types of schedulers that can be loaded at runtime
 enum class OMP_Scheduler_Type{TASKING, QUEUE};
 
 template<typename Problem_Consts, typename Subproblem_Params, typename Domain_Type>
 class Solver_omp : public BnB_Solver<Problem_Consts, Subproblem_Params, Domain_Type>
 {
 public:
-
-    void setNumThreads(size_t num) {numThreads = num;};
-    void setEps(Domain_Type e) {scheduler->Eps(e);}
-    void setTraversal(TraversalMode mode){scheduler->Traversal(mode);}
-
-    // if not called default scheduler will be used
     void SetScheduler(OMP_Scheduler_Type);
+    void SetNumThreads(int num){numThreads = num;}
+    // returns a reference to the scheduler who exposes its parameters
+    auto SetSchedulerParameters() {return scheduler.get();}
+
 
     Subproblem_Params Maximize(const Problem_Definition<Problem_Consts, Subproblem_Params, Domain_Type>& Problem_Def, const Problem_Consts& prob);
     Subproblem_Params Minimize(const Problem_Definition<Problem_Consts, Subproblem_Params, Domain_Type>& Problem_Def, const Problem_Consts& prob);
@@ -36,8 +34,10 @@ template<typename Problem_Consts, typename Subproblem_Params, typename Domain_Ty
 Subproblem_Params Solver_omp<Problem_Consts, Subproblem_Params, Domain_Type>::Maximize(const Problem_Definition<Problem_Consts, Subproblem_Params, Domain_Type>& Problem_Def, const Problem_Consts& prob)
 {
     Domain_Type WorstSolution = std::numeric_limits<Domain_Type>::lowest();
+    omp_set_dynamic(0);
     omp_set_num_threads(numThreads);
     Subproblem_Params result = scheduler->Execute(Problem_Def, prob, Goal::MAX, WorstSolution);
+    std::cout << "threads are set to " << numThreads << std::endl;
     return result;
 }
 
@@ -45,8 +45,10 @@ template<typename Problem_Consts, typename Subproblem_Params, typename Domain_Ty
 Subproblem_Params Solver_omp<Problem_Consts, Subproblem_Params, Domain_Type>::Minimize(const Problem_Definition<Problem_Consts, Subproblem_Params, Domain_Type>& Problem_Def, const Problem_Consts& prob)
 {
     Domain_Type WorstSolution = std::numeric_limits<Domain_Type>::max();
+    omp_set_dynamic(0);
     omp_set_num_threads(numThreads);
     Subproblem_Params result = scheduler->Execute(Problem_Def, prob, Goal::MIN, WorstSolution);
+    std::cout << "threads are set to " << numThreads << std::endl;
     return result;
 }
 

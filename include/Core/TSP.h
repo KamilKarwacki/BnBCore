@@ -58,7 +58,7 @@ namespace BnB::TSP {
         };
 
         TSPProblem.IsFeasible = [](const Consts &consts, const Params &params) {
-            return FEASIBILITY::FULL;
+            return FEASIBILITY::Full;
         };
 
 

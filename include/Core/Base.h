@@ -7,6 +7,7 @@
 #include <sstream>
 #include <any>
 #include <variant>
+#include <fstream>
 #include <queue>
 #include <memory>
 #include <cstring>
@@ -44,7 +45,7 @@ namespace BnB
     template<typename... Args>
     using Subproblem_Parameters = std::tuple<Args...>;
 
-    enum class FEASIBILITY{FULL, PARTIAL, NONE};
+    enum class FEASIBILITY{Full, PARTIAL, NONE};
 }
 
 
@@ -78,7 +79,29 @@ public:
 };
 
 
-enum class TraversalMode {DFS, BFS};
+enum class TraversalMode {DFS, BFS, AUTOMATIC};
+
+template<typename Subproblem_Params>
+Subproblem_Params GetNextSubproblem(std::deque<Subproblem_Params>& Container, TraversalMode Mode){
+    Subproblem_Params NextSubproblem;
+    switch(Mode){
+        case TraversalMode::DFS:
+            NextSubproblem = Container.back(); Container.pop_back();
+			break;
+        case TraversalMode::BFS:
+            NextSubproblem = Container.front(); Container.pop_front();
+			break;
+        case TraversalMode::AUTOMATIC:
+            if(Container.size() > 20000){
+                NextSubproblem = Container.back(); Container.pop_back();
+            }else{
+                NextSubproblem = Container.front(); Container.pop_front();
+            }
+    }
+    return NextSubproblem;
+}
+
+
 
 enum class Goal : bool {
     MAX = true,

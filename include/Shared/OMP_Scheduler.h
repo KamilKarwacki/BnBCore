@@ -14,8 +14,8 @@ public:
             const Goal goal,
             const Domain_Type WorstBound) = 0;
 
-    void Eps(Domain_Type e){eps = e;}
-    void Traversal(TraversalMode mode_){mode = mode_;}
+    OMP_Scheduler<Problem_Consts, Subproblem_Params, Domain_Type>* Eps(Domain_Type e){eps = e;return this;}
+    OMP_Scheduler<Problem_Consts, Subproblem_Params, Domain_Type>* Traversal(TraversalMode mode_){mode = mode_; return this;}
 protected:
     Domain_Type eps;
     TraversalMode mode = TraversalMode::DFS;

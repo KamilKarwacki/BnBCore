@@ -99,8 +99,9 @@ Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Ty
 
                             // try to make the bound better
                             auto Feasibility = Problem_Def.IsFeasible(prob, sol);
+
                             Domain_Type CandidateBound;
-                            if (Feasibility == BnB::FEASIBILITY::FULL) {
+                            if (Feasibility == BnB::FEASIBILITY::Full) {
                                 CandidateBound = Problem_Def.GetContainedUpperBound(prob, sol);
                                 #pragma omp critical
                                 {
@@ -121,7 +122,7 @@ Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Ty
                             std::vector<Subproblem_Params> v;
                             if (std::abs(CandidateBound - LowerBound) > this->eps) {
                                 v = Problem_Def.SplitSolution(prob, sol);
-                                for (const auto &el : v) {
+                                for (auto &&el : v) {
                                     #pragma omp critical (queuelock)
                                     {
                                         LocalTaskQueue.push_back(el);

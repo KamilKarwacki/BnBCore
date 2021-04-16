@@ -60,6 +60,7 @@ Subproblem_Params DefaultMasterBehavior(std::stringstream& sendstream,
         idleProcIds.push_back(i);
     }
     // encode initial problem and empty sol into sendstream
+    sendstream << 1 << " ";
     encoder.Encode_Solution(sendstream, BestSubproblem);
     sendstream << GlobalBestBound << " ";
     // send it to idle processor no. 1

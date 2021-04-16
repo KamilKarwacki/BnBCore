@@ -58,36 +58,24 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
         const Goal goal,
         const Domain_Type WorstBound)
 {
-    ///auto cmp = [](Subproblem_Params p1, Subproblem_Params p2)
-   ///{return std::get<3>(p1) < std::get<3>(p2);};
-   ///std::priority_queue<Subproblem_Params, std::vector<Subproblem_Params>, decltype(cmp)> TaskQueue(cmp);
-    ///TaskQueue.push(Problem_Def.GetInitialSubproblem(prob));
     std::deque<Subproblem_Params> TaskQueue;
     TaskQueue.push_back(Problem_Def.GetInitialSubproblem(prob));
 
     Domain_Type BestBound = WorstBound;
     Subproblem_Params BestSubproblem;
     int NumProblemsSolved = 0;
+    int ProblemsEliminated = 0;
 
     while(!TaskQueue.empty())
     {
 	    NumProblemsSolved++;
-        Subproblem_Params sol;
-
-        if(this->mode == TraversalMode::DFS){
-            sol = TaskQueue.back(); TaskQueue.pop_back();
-        }else if( this->mode == TraversalMode::BFS){
-            sol = TaskQueue.front(); TaskQueue.pop_front();
-        }
-
-
-       ///sol = TaskQueue.top(); TaskQueue.pop();
-
+        Subproblem_Params sol = GetNextSubproblem(TaskQueue, this->mode);
 
         //ignore if its bound is worse than already known best sol.
         auto [LowerBound, UpperBound] = Problem_Def.GetEstimateForBounds(prob, sol);
         if (((bool) goal && LowerBound < BestBound)
             || (!(bool) goal && LowerBound > BestBound)) {
+            ProblemsEliminated++;
             continue;
         }
 
@@ -95,7 +83,7 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
         bool IsPotentialBestSolution = false;
         auto Feasibility = Problem_Def.IsFeasible(prob, sol);
         Domain_Type CandidateBound;
-        if (Feasibility == BnB::FEASIBILITY::FULL) {
+        if (Feasibility == BnB::FEASIBILITY::Full) {
             CandidateBound = (Problem_Def.GetContainedUpperBound(prob, sol));
             if (((bool) goal && CandidateBound >= BestBound)
                 || (!(bool) goal && CandidateBound <= BestBound)) {
@@ -115,11 +103,11 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
             v = Problem_Def.SplitSolution(prob, sol);
             for(auto&& el : v)
                 TaskQueue.push_back(el);
-                ///TaskQueue.push(el);
         }if(IsPotentialBestSolution)
             BestSubproblem = sol;
     }
     std::cout << "I have solved " << NumProblemsSolved << " problems" << std::endl;
+    std::cout << "and eliminated " << ProblemsEliminated << " problems" << std::endl;
     Problem_Def.PrintSolution(BestSubproblem);
     return BestSubproblem;
 }

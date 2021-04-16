@@ -23,7 +23,7 @@ public:
     Subproblem_Params Minimize(const Problem_Definition<Problem_Consts, Subproblem_Params, Domain_Type>&, const Problem_Consts&);
     // if not called default scheduler will be used
     void SetScheduler(MPI_Scheduler_Type Scheduler);
-    // set frequency of worker to master communication
+    // return instance of scheduler who exposes his parameter setter functions
     auto SetSchedulerParameters() {return scheduler.get();}
 
 private:
