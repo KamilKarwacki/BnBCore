@@ -66,19 +66,17 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
     int NumProblemsSolved = 0;
     int ProblemsEliminated = 0;
 
-    std::vector<double> timings(4);
+    std::vector<double> timings(3);
     using namespace std::chrono;
 
 
-    time_point<system_clock> start, end;
-
-
+    time_point<high_resolution_clock> start, end;
 
 
     while(!TaskQueue.empty())
     {
 	    NumProblemsSolved++;
-	    start = system_clock::now();
+	    start = high_resolution_clock::now();
 
         Subproblem_Params sol = GetNextSubproblem(TaskQueue, this->mode);
 
@@ -87,14 +85,14 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
         if (((bool) goal && LowerBound < BestBound)
             || (!(bool) goal && LowerBound > BestBound)) {
             ProblemsEliminated++;
-            end = system_clock::now();
-            timings[0] += duration_cast<milliseconds>(end - start).count()/1000.0;
+            end = high_resolution_clock::now();
+            timings[0] += duration_cast<milliseconds>(end - start).count()/1.0e9;
             continue;
         }
 
 
-        end = system_clock::now();
-        timings[0] += duration_cast<milliseconds>(end - start).count()/1000.0;
+        end = high_resolution_clock::now();
+        timings[0] += duration_cast<nanoseconds>(end - start).count()/1.0e9;
 
         // try to make the bound better only if the solution lies in a feasible domain
         bool IsPotentialBestSolution = false;
@@ -115,8 +113,8 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
             continue;
 
 
-        start = system_clock::now();
-        timings[1] += duration_cast<milliseconds>(start - end).count()/1000.0;
+        start = high_resolution_clock::now();
+        timings[1] += duration_cast<nanoseconds>(start - end).count()/1.0e9;
 
         std::vector<Subproblem_Params> v;
         // TODO try to pass the bound difference to split func to calculate the priority
@@ -126,8 +124,8 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
                 TaskQueue.push_back(el);
         }if(IsPotentialBestSolution)
             BestSubproblem = sol;
-        end = system_clock::now();
-        timings[2] += duration_cast<milliseconds>(end - start).count()/1000.0;
+        end = high_resolution_clock::now();
+        timings[2] += duration_cast<nanoseconds>(end - start).count()/1.0e9;
     }
     std::cout << "I have solved " << NumProblemsSolved << " problems" << std::endl;
     std::cout << "and eliminated " << ProblemsEliminated << " problems" << std::endl;
