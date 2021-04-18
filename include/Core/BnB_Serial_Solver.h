@@ -122,8 +122,6 @@ Subproblem_Params Solver_Serial<Problem_Consts, Subproblem_Params, Domain_Type>:
         if(std::abs(CandidateBound - LowerBound) > this->Eps){ // epsilon criterion for convergence
             v = Problem_Def.SplitSolution(prob, sol);
             std::move(std::begin(v), std::end(v), std::back_inserter(TaskQueue));
-            ///for(auto&& el : v)
-              ///  TaskQueue.push_back(el);
         }if(IsPotentialBestSolution)
             BestSubproblem = sol;
         end = high_resolution_clock::now();

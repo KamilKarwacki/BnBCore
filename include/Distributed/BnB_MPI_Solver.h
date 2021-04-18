@@ -24,7 +24,7 @@ public:
     // if not called default scheduler will be used
     void SetScheduler(MPI_Scheduler_Type Scheduler);
     // return instance of scheduler who exposes his parameter setter functions
-    auto SetSchedulerParameters() {return scheduler.get();}
+    MPI_Scheduler<Problem_Consts, Subproblem_Params, Domain_Type>* SetSchedulerParameters() {return scheduler.get();}
 
 private:
     // can encode the Subproblem_Params into a string that can be send via MPI

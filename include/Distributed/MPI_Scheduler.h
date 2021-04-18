@@ -28,6 +28,8 @@ protected:
     Domain_Type eps;
     TraversalMode mode = TraversalMode::DFS;
 
+
+
     // only for Hybrid
     int OpenMPThreads = 1;
 };

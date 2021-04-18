@@ -56,6 +56,7 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
                                                                                  const Domain_Type WorstBound)
 {
     int PackageSize = 1;
+
     bool RequestOngoing = false;
     int pid, num;
     MPI_Comm_rank(MPI_COMM_WORLD, &pid);
@@ -64,6 +65,8 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
     MPI_Status st;
     MPI_Request SlaveReq;
     std::vector<MPI_Request> req(num);
+    std::vector<bool> OpenRequests(num, false);
+
     std::vector<std::stringstream> sendstreams(num);
     for(auto& stream : sendstreams)
         stream << std::setprecision(15);
@@ -143,7 +146,6 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
                         v = Problem_Def.SplitSolution(prob, sol);
                         for(auto&& el : v) {
                             LocalTaskQueue.push_back(el);
-
                         }
 		            }else if(IsPotentialCandidate){
                         BestSubproblem = sol;
@@ -159,7 +161,6 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
                                   Default::MessageType::GET_SLAVES, MPI_COMM_WORLD, &SlaveReq);
                         RequestOngoing = true;
                     }
-
 
                     if(RequestOngoing) {
                         int flag = 0;
@@ -190,11 +191,7 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
                                     }
                                     Subproblem_Params SubProb;
 
-                                    ///if(this->mode == TraversalMode::DFS){
-                                    ///    SubProb = LocalTaskQueue.back(); LocalTaskQueue.pop_back();
-                                    ///}else if( this->mode == TraversalMode::BFS){
                                     SubProb = LocalTaskQueue.front(); LocalTaskQueue.pop_front();
-                                    ///}
 
                                     auto[lower, upper] = Problem_Def.GetEstimateForBounds(prob, SubProb);
                                     if (((bool) goal && lower < LocalBestBound)
@@ -207,8 +204,10 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
                                 }
                                 sendstreams[sl_no] << LocalBestBound<< " ";
                                 //send it to idle processor
+                                if(OpenRequests[sl_no]) MPI_Wait(&req[sl_no], MPI_STATUS_IGNORE);
                                 MPI_Isend(&sendstreams[sl_no].str()[0],strlen(sendstreams[sl_no].str().c_str()), MPI_CHAR, sl_no,
                                           Default::MessageType::PROB, MPI_COMM_WORLD, &req[sl_no]);
+                                OpenRequests[sl_no] = true;
                             }
                         }
                     }
@@ -216,8 +215,8 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
                     counter++;
                 }
                 //This slave has now become idle (its queue is empty). Inform master.
-                sendstreams[num-1].str("");
-                MPI_Send(&sendstreams[num - 1].str()[0],10,MPI_CHAR,0,Default::MessageType::IDLE, MPI_COMM_WORLD);
+                sendstreams[0].str("");
+                MPI_Send(&sendstreams[0].str()[0],10,MPI_CHAR,0,Default::MessageType::IDLE, MPI_COMM_WORLD);
             }
             else if(st.MPI_TAG == Default::MessageType::FINISH){
 		        printProc("I have solved " << NumProblemsSolved << " problems and eliminated" << ProblemsEliminated);
@@ -227,14 +226,13 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
     }
 
     // cleanup
+    if(pid != 0){
+       if(RequestOngoing)
+           MPI_Request_free(&SlaveReq);
+       for(int i = 1; i < num; i++)
+           if(OpenRequests[i]) MPI_Request_free(&req[i]);
+    }
 
-    /*for(int i = 1; i < num;i++)
-        if(req[i] !=  MPI_REQUEST_NULL)
-            MPI_Cancel(&req[i]);*/
-/*    for(auto& request : req){
-        if(request!=  MPI_REQUEST_NULL)
-            MPI_Cancel(&request);
-    }*/
 
     // ------------------------ ALL procs have a best solution now master has to gather it
     return ExtractBestSolution<Prob_Consts,Subproblem_Params, Domain_Type>(sendstreams[0], receivstream,
