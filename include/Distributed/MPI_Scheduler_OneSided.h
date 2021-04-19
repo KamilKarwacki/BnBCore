@@ -18,14 +18,10 @@ public:
                               const Goal goal,
                               const Domain_Type WorstBound) override;
     MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_Type>* TermCheckFrequency(int freq){TerminationCheckFrequency = freq; return this;}
-    MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_Type>* MaximalPackageSize(int size){MaxPackageSize = size; return this;}
 
-    // for Collective solver
 private:
     int TerminationCheckFrequency = 100;
     float PercentageToShare = 0.5f;
-    int MaxPackageSize = 1;
-
 };
 
 
@@ -60,7 +56,6 @@ Subproblem_Params MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_
     MPI_Status throwAway;
     MPI_Request workReq, req2, terminationReq, boundexchangeReq;
     bool req2_ongoing = false;
-    bool workReq_ongoing = false;
 
     std::vector<std::stringstream> sendstreams(num);
     for(auto& stream : sendstreams)
@@ -272,25 +267,29 @@ Subproblem_Params MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_
     MPI_Barrier(MPI_COMM_WORLD);
 
     ///                       Clean UP                           ///
-    IdleProcAsksForWork = 0;
-    MPI_Iprobe(MPI_ANY_SOURCE, OneSided::MessageType::IDLE_PROC_WANTS_WORK, MPI_COMM_WORLD,
-               &IdleProcAsksForWork, &st); // test if another processor has sent me a request
-    if (IdleProcAsksForWork == 1){
-        MPI_Recv(buffer, 1, MPI_CHAR, st.MPI_SOURCE, OneSided::MessageType::IDLE_PROC_WANTS_WORK,
-                 MPI_COMM_WORLD, &st);
-        printProc("CLEARNUP SUCCESSFULL" << __LINE__)
+    for(int i = 0; i < num; i++){
+        IdleProcAsksForWork = 0;
+        MPI_Iprobe(MPI_ANY_SOURCE, OneSided::MessageType::IDLE_PROC_WANTS_WORK, MPI_COMM_WORLD,
+                   &IdleProcAsksForWork, &st); // test if another processor has sent me a request
+        if (IdleProcAsksForWork == 1){
+            MPI_Recv(buffer, 1, MPI_CHAR, st.MPI_SOURCE, OneSided::MessageType::IDLE_PROC_WANTS_WORK,
+                     MPI_COMM_WORLD, &st);
+            printProc("CLEARNUP SUCCESSFULL" << __LINE__)
+        }
+
+        int requestReceived = 0;
+        MPI_Iprobe(MPI_ANY_SOURCE, OneSided::MessageType::WORK_EXCHANGE, MPI_COMM_WORLD,
+                   &requestReceived, &st); // test if another processor has sent me a request
+        if (requestReceived == 1)
+        {
+            MPI_Recv(buffer, 100000, MPI_CHAR, st.MPI_SOURCE, OneSided::MessageType::WORK_EXCHANGE,
+                     MPI_COMM_WORLD, &throwAway);
+            printProc("CLEARNUP SUCCESSFULL" << __LINE__)
+        }
+
     }
 
 
-    int requestReceived = 0;
-    MPI_Iprobe(MPI_ANY_SOURCE, OneSided::MessageType::WORK_EXCHANGE, MPI_COMM_WORLD,
-               &requestReceived, &st); // test if another processor has sent me a request
-    if (requestReceived == 1)
-    {
-        MPI_Recv(buffer, 100000, MPI_CHAR, st.MPI_SOURCE, OneSided::MessageType::WORK_EXCHANGE,
-                 MPI_COMM_WORLD, &throwAway);
-        printProc("CLEARNUP SUCCESSFULL" << __LINE__)
-    }
 
 
     MPI_Barrier(MPI_COMM_WORLD);

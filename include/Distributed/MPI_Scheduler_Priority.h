@@ -13,6 +13,8 @@ public:
                  const MPI_Message_Encoder<Subproblem_Params>& encoder,
                  const Goal goal,
                  const Domain_Type WorstBound) override;
+
+
 };
 
 // TODO compare to normal if statements
@@ -55,8 +57,6 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
                                                                                  const Goal goal,
                                                                                  const Domain_Type WorstBound)
 {
-    int PackageSize = 1;
-
     bool RequestOngoing = false;
     int pid, num;
     MPI_Comm_rank(MPI_COMM_WORLD, &pid);
@@ -78,7 +78,7 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
     int ProblemsEliminated = 0;
 
     if(pid == 0){
-        BestSubproblem = DefaultMasterBehavior(sendstreams[0], receivstream, Problem_Def, prob, encoder, goal, WorstBound);
+        BestSubproblem = DefaultMasterBehavior(sendstreams, receivstream, Problem_Def, prob, encoder, goal, WorstBound);
     }
     else{
         char buffer[20000];
@@ -178,31 +178,23 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
                                 //give a problem to each slave
                                 int sl_no;
                                 receivstream >> sl_no;
-                                sendstreams[sl_no].str("");
-                                int RestSize = std::min(PackageSize, (int)LocalTaskQueue.size());
-                                if(RestSize == 0) continue;
-                                sendstreams[sl_no] << RestSize << " ";
-                                int ProblemsInBuffer = 0;
-                                while(ProblemsInBuffer != RestSize){
-                                    if(LocalTaskQueue.empty()){
-                                        sendstreams[sl_no].str("");
-                                        sendstreams[sl_no] << 0 << " ";
-                                        break;
-                                    }
-                                    Subproblem_Params SubProb;
-
-                                    SubProb = LocalTaskQueue.front(); LocalTaskQueue.pop_front();
-
-                                    auto[lower, upper] = Problem_Def.GetEstimateForBounds(prob, SubProb);
-                                    if (((bool) goal && lower < LocalBestBound)
-                                        || (!(bool) goal && lower > LocalBestBound)){
+                                int RestSize = std::min(this->MaxPackageSize, (int)LocalTaskQueue.size());
+                                std::vector<Subproblem_Params> SubproblemsToSend;
+                                while(!LocalTaskQueue.empty() and SubproblemsToSend.size() != RestSize) {
+                                    Subproblem_Params subprb = LocalTaskQueue.front(); LocalTaskQueue.pop_front();
+                                    auto [Lower, Upper] = Problem_Def.GetEstimateForBounds(prob, subprb);
+                                    if (((bool) goal && Lower < LocalBestBound)
+                                        || (!(bool) goal && Lower > LocalBestBound)) {
                                         continue;
                                     }
-                                    encoder.Encode_Solution(sendstreams[sl_no], SubProb);
-                                    ProblemsInBuffer++;
-
+                                    SubproblemsToSend.push_back(subprb);
                                 }
-                                sendstreams[sl_no] << LocalBestBound<< " ";
+
+                                sendstreams[sl_no].str("");
+                                sendstreams[sl_no] << static_cast<int>(SubproblemsToSend.size()) << " ";
+                                for(auto&& subproblem : SubproblemsToSend)
+                                    encoder.Encode_Solution(sendstreams[sl_no], subproblem);
+                                sendstreams[sl_no] << LocalBestBound << " ";
                                 //send it to idle processor
                                 if(OpenRequests[sl_no]) MPI_Wait(&req[sl_no], MPI_STATUS_IGNORE);
                                 MPI_Isend(&sendstreams[sl_no].str()[0],strlen(sendstreams[sl_no].str().c_str()), MPI_CHAR, sl_no,

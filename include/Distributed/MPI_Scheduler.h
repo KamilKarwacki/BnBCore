@@ -22,12 +22,13 @@ public:
     MPI_Scheduler<Prob_Consts, Subproblem_Params, Domain_Type>* Threads(size_t num) {OpenMPThreads = num; return this;}
     MPI_Scheduler<Prob_Consts, Subproblem_Params, Domain_Type>* Eps(Domain_Type e) {eps = e; return this;}
     MPI_Scheduler<Prob_Consts, Subproblem_Params, Domain_Type>* TraversMode(TraversalMode m) {mode = m; return this;};
+    MPI_Scheduler<Prob_Consts, Subproblem_Params, Domain_Type>* MaximalPackageSize(int size){MaxPackageSize = size; return this;}
 
 protected:
     int Communication_Frequency = 1;
     Domain_Type eps;
     TraversalMode mode = TraversalMode::DFS;
-
+    int MaxPackageSize = 1;
 
 
     // only for Hybrid
@@ -36,7 +37,7 @@ protected:
 
 
 template<typename Prob_Consts, typename Subproblem_Params, typename Domain_Type>
-Subproblem_Params DefaultMasterBehavior(std::stringstream& sendstream,
+Subproblem_Params DefaultMasterBehavior(std::vector<std::stringstream>& sendstream,
                                         std::stringstream& receivstream,
                                         const Problem_Definition<Prob_Consts, Subproblem_Params, Domain_Type>& Problem_Def,
                                         const Prob_Consts& prob,
@@ -49,6 +50,8 @@ Subproblem_Params DefaultMasterBehavior(std::stringstream& sendstream,
     MPI_Comm_rank(MPI_COMM_WORLD, &pid);
     MPI_Comm_size(MPI_COMM_WORLD, &num);
     MPI_Status st;
+    std::vector<MPI_Request> req(num);
+    std::vector<bool> OpenRequests(num, false);
 
     int NumMessages = 0;
 
@@ -62,11 +65,11 @@ Subproblem_Params DefaultMasterBehavior(std::stringstream& sendstream,
         idleProcIds.push_back(i);
     }
     // encode initial problem and empty sol into sendstream
-    sendstream << 1 << " ";
-    encoder.Encode_Solution(sendstream, BestSubproblem);
-    sendstream << GlobalBestBound << " ";
+    sendstream[1] << 1 << " ";
+    encoder.Encode_Solution(sendstream[1], BestSubproblem);
+    sendstream[1] << GlobalBestBound << " ";
     // send it to idle processor no. 1
-    MPI_Send(sendstream.str().c_str(),strlen(sendstream.str().c_str()), MPI_CHAR, 1, Default::MessageType::PROB, MPI_COMM_WORLD);
+    MPI_Send(sendstream[1].str().c_str(),strlen(sendstream[1].str().c_str()), MPI_CHAR, 1, Default::MessageType::PROB, MPI_COMM_WORLD);
     while(idleProcIds.size() != num - 1){
         MPI_Recv(buffer, 2000,MPI_CHAR, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
         NumMessages++;
@@ -86,15 +89,16 @@ Subproblem_Params DefaultMasterBehavior(std::stringstream& sendstream,
 
             receivstream >> sl_needed;
             int sl_given = std::min(sl_needed, (int)idleProcIds.size());;
-            sendstream.str("");
-            sendstream << GlobalBestBound << " ";
-            sendstream << sl_given << " ";
+            sendstream[r].str("");
+            sendstream[r] << GlobalBestBound << " ";
+            sendstream[r] << sl_given << " ";
 
             std::for_each(idleProcIds.begin(), idleProcIds.begin() + sl_given,
-                          [&sendstream](const int& el){sendstream << el << " ";});
+                          [&sendstream, &r](const int& el){sendstream[r] << el << " ";});
 
-            MPI_Send(&sendstream.str()[0],strlen(sendstream.str().c_str())+1,MPI_CHAR,r,Default::MessageType::GET_SLAVES,MPI_COMM_WORLD);
-
+            if(OpenRequests[r]) MPI_Wait(&req[r], MPI_STATUS_IGNORE);
+            MPI_Isend(&sendstream[r].str()[0],strlen(sendstream[r].str().c_str())+1,MPI_CHAR,r,Default::MessageType::GET_SLAVES,MPI_COMM_WORLD, &req[r]);
+            OpenRequests[r] = true;
             idleProcIds.erase(idleProcIds.begin(), idleProcIds.begin() + sl_given);
         }
         else if(st.MPI_TAG == Default::MessageType::IDLE){
@@ -106,6 +110,9 @@ Subproblem_Params DefaultMasterBehavior(std::stringstream& sendstream,
     for(int i=1;i<num;i++){
         MPI_Send(buffer, 1, MPI_CHAR, i, Default::MessageType::FINISH, MPI_COMM_WORLD);
     }
+
+    for(int i = 1; i < num; i++)
+        if(OpenRequests[i]) MPI_Request_free(&req[i]);
     printProc("the master received a total of " << NumMessages << " messages");
     return BestSubproblem;
 }
