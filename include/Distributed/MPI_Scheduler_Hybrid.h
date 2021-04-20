@@ -38,6 +38,9 @@ Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Ty
     std::vector<bool> OpenRequests(num, false);
     bool RequestOngoing = false;
 
+    omp_lock_t QueueLock;
+    omp_init_lock(&QueueLock);
+
     std::vector<std::stringstream> sendstreams(num);
     for(auto& stream : sendstreams)
         stream << std::setprecision(15);
@@ -79,7 +82,7 @@ Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Ty
 
                 while(!LocalTaskQueue.empty())
                 {
-                    #pragma omp parallel num_threads(this->OpenMPThreads)  shared(LocalBestBound, LocalTaskQueue, BestSubproblem)
+#pragma omp parallel num_threads(this->OpenMPThreads)  shared(LocalBestBound, LocalTaskQueue, BestSubproblem, counter)
                     {
                         while(counter % this->Communication_Frequency != 0) {
                             #pragma omp atomic
@@ -87,13 +90,12 @@ Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Ty
 
                             Subproblem_Params sol;
                             bool isEmpty = false;
-                            #pragma omp critical (queuelock)
-                            {
-                                isEmpty = LocalTaskQueue.empty();
-                                if (!isEmpty) {
-                                    sol = GetNextSubproblem(LocalTaskQueue, this->mode);
-                                }
+                            omp_set_lock(&QueueLock);
+                            isEmpty = LocalTaskQueue.empty();
+                            if (!isEmpty) {
+                                sol = GetNextSubproblem(LocalTaskQueue, this->mode);
                             }
+                            omp_unset_lock(&QueueLock);
                             if (isEmpty)
                                 break;
 
@@ -103,7 +105,6 @@ Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Ty
                                 || (!(bool) goal && LowerBound > LocalBestBound)) {
                                 continue;
                             }
-
                             // try to make the bound better
                             auto Feasibility = Problem_Def.IsFeasible(prob, sol);
                             Domain_Type CandidateBound;
@@ -134,10 +135,9 @@ Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Ty
                                         || (!(bool) goal && Lower > LocalBestBound)) {
                                         continue;
                                     }
-                                    #pragma omp critical (queuelock)
-                                    {
-                                        LocalTaskQueue.push_back(el);
-                                    }
+                                    omp_set_lock(&QueueLock);
+                                    LocalTaskQueue.push_back(el);
+                                    omp_unset_lock(&QueueLock);
                                 }
                             }
                         }
@@ -145,49 +145,54 @@ Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Ty
                     }
 
 
-                    counter = 0;
-                    // request master for slaves
-                    if(!RequestOngoing) {
-                        sendstreams[0].str("");
-                        sendstreams[0] << LocalBestBound << " ";
-                        sendstreams[0] << (int) LocalTaskQueue.size() << " ";
-                        MPI_Issend(&sendstreams[0].str()[0], strlen(sendstreams[0].str().c_str()), MPI_CHAR, 0,
-                                  Default::MessageType::GET_SLAVES, MPI_COMM_WORLD, &SlaveReq);
-                        RequestOngoing = true;
-                    }else{
-                        int flag = 0;
-                        MPI_Test(&SlaveReq, &flag, MPI_STATUS_IGNORE);
-                        if(flag == 1) {
-                            RequestOngoing = false;
-                            //get master's response
-                            MPI_Recv(buffer,200, MPI_CHAR, 0, Default::MessageType::GET_SLAVES, MPI_COMM_WORLD, &st);
-                            receivstream.str(buffer);
-                            int slaves_avbl;
-                            receivstream >> LocalBestBound;
-                            receivstream >> slaves_avbl;
 
-                            for(int i=0; i<slaves_avbl; i++){
-                                //give a problem to each slave
-                                int sl_no;
-                                receivstream >> sl_no;
-                                int RestSize = std::min(this->MaxPackageSize, (int)LocalTaskQueue.size());
-                                std::vector<Subproblem_Params> SubproblemsToSend;
-                                while(!LocalTaskQueue.empty() and SubproblemsToSend.size() != RestSize) {
-                                    Subproblem_Params subprb = LocalTaskQueue.front(); LocalTaskQueue.pop_front();
-                                    SubproblemsToSend.push_back(subprb);
+                    counter = 1;
+
+                    if(!LocalTaskQueue.empty()) {
+                        // request master for slaves
+                        if(!RequestOngoing) {
+                            sendstreams[0].str("");
+                            sendstreams[0] << LocalBestBound << " ";
+                            sendstreams[0] << (int) LocalTaskQueue.size() << " ";
+                            MPI_Issend(&sendstreams[0].str()[0], strlen(sendstreams[0].str().c_str()), MPI_CHAR, 0,
+                                       Default::MessageType::GET_SLAVES, MPI_COMM_WORLD, &SlaveReq);
+                            RequestOngoing = true;
+                        }
+
+                        if(RequestOngoing){
+                            int flag = 0;
+                            MPI_Test(&SlaveReq, &flag, MPI_STATUS_IGNORE);
+                            if(flag == 1) {
+                                RequestOngoing = false;
+                                //get master's response
+                                MPI_Recv(buffer,200, MPI_CHAR, 0, Default::MessageType::GET_SLAVES, MPI_COMM_WORLD, &st);
+                                receivstream.str(buffer);
+                                int slaves_avbl;
+                                receivstream >> LocalBestBound;
+                                receivstream >> slaves_avbl;
+
+                                for(int i=0; i<slaves_avbl; i++){
+                                    //give a problem to each slave
+                                    int sl_no;
+                                    receivstream >> sl_no;
+                                    int RestSize = std::min(this->MaxPackageSize, (int)LocalTaskQueue.size());
+                                    std::vector<Subproblem_Params> SubproblemsToSend;
+                                    while(!LocalTaskQueue.empty() and SubproblemsToSend.size() != RestSize) {
+                                        Subproblem_Params subprb = LocalTaskQueue.front(); LocalTaskQueue.pop_front();
+                                        SubproblemsToSend.push_back(subprb);
+                                    }
+
+                                    sendstreams[sl_no].str("");
+                                    sendstreams[sl_no] << static_cast<int>(SubproblemsToSend.size()) << " ";
+                                    for(auto&& subproblem : SubproblemsToSend)
+                                        encoder.Encode_Solution(sendstreams[sl_no], subproblem);
+                                    sendstreams[sl_no] << LocalBestBound << " ";
+                                    //send it to idle processor
+                                    if(OpenRequests[sl_no]) MPI_Wait(&req[sl_no], MPI_STATUS_IGNORE);
+                                    MPI_Isend(&sendstreams[sl_no].str()[0],strlen(sendstreams[sl_no].str().c_str()), MPI_CHAR, sl_no,
+                                              Default::MessageType::PROB, MPI_COMM_WORLD, &req[sl_no]);
+                                    OpenRequests[sl_no] = true;
                                 }
-
-                                sendstreams[sl_no].str("");
-                                sendstreams[sl_no] << static_cast<int>(SubproblemsToSend.size()) << " ";
-                                for(auto&& subproblem : SubproblemsToSend)
-                                    encoder.Encode_Solution(sendstreams[sl_no], subproblem);
-                                sendstreams[sl_no] << LocalBestBound << " ";
-                                //send it to idle processor
-                                printProc("sending to proc " << sl_no << "  " << SubproblemsToSend.size())
-                                if(OpenRequests[sl_no]) MPI_Wait(&req[sl_no], MPI_STATUS_IGNORE);
-                                MPI_Isend(&sendstreams[sl_no].str()[0],strlen(sendstreams[sl_no].str().c_str()), MPI_CHAR, sl_no,
-                                          Default::MessageType::PROB, MPI_COMM_WORLD, &req[sl_no]);
-                                OpenRequests[sl_no] = true;
                             }
                         }
                     }
@@ -202,6 +207,8 @@ Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Ty
             }
         }
     }
+
+    omp_destroy_lock(&QueueLock);
 
     if(pid != 0){
         if(RequestOngoing)
