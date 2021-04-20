@@ -97,7 +97,7 @@ Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Ty
                             }
                             omp_unset_lock(&QueueLock);
                             if (isEmpty)
-                                break;
+                                continue;
 
                             //ignore if its bound is worse than already known best sol.
                             auto [LowerBound, UpperBound] = Problem_Def.GetEstimateForBounds(prob, sol);
@@ -148,13 +148,11 @@ Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Ty
 
                     counter = 1;
 
-                    if(!LocalTaskQueue.empty()) {
-                        // request master for slaves
                         if(!RequestOngoing) {
                             sendstreams[0].str("");
                             sendstreams[0] << LocalBestBound << " ";
                             sendstreams[0] << (int) LocalTaskQueue.size() << " ";
-                            MPI_Issend(&sendstreams[0].str()[0], strlen(sendstreams[0].str().c_str()), MPI_CHAR, 0,
+                            MPI_Isend(&sendstreams[0].str()[0], strlen(sendstreams[0].str().c_str()), MPI_CHAR, 0,
                                        Default::MessageType::GET_SLAVES, MPI_COMM_WORLD, &SlaveReq);
                             RequestOngoing = true;
                         }
@@ -195,7 +193,6 @@ Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Ty
                                 }
                             }
                         }
-                    }
                 }
 
                 //This slave has now become idle (its queue is empty). Inform master.
