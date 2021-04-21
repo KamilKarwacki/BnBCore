@@ -61,7 +61,7 @@ Subproblem_Params MPI_Scheduler_Priority<Prob_Consts, Subproblem_Params, Domain_
     int pid, num;
     MPI_Comm_rank(MPI_COMM_WORLD, &pid);
     MPI_Comm_size(MPI_COMM_WORLD, &num);
-    assert(num >= 3 && "this implementation needs at least 3 cores");
+    assert(num >= 2 && "this implementation needs at least 3 cores");
     MPI_Status st;
     MPI_Request SlaveReq;
     std::vector<MPI_Request> req(num);

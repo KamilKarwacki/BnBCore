@@ -54,8 +54,9 @@ Subproblem_Params MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_
     assert(num >= 2 && "this implementation needs at least 2 cores");
     MPI_Status st;
     MPI_Status throwAway;
-    MPI_Request workReq, req2, terminationReq, boundexchangeReq;
-    bool req2_ongoing = false;
+    MPI_Request workReq, terminationReq, boundexchangeReq;
+    std::vector<MPI_Request> ShareRequests(num);
+    std::vector<MPI_Request> ShareRequest_ongoing(num, false) ;
 
     std::vector<std::stringstream> sendstreams(num);
     for(auto& stream : sendstreams)
@@ -163,10 +164,10 @@ Subproblem_Params MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_
             for(auto&& subproblem : SubproblemsToSend)
                 encoder.Encode_Solution(sendstreams[target], subproblem);
             assert(strlen(sendstreams[target].str().c_str()) < 20000 && "buffer full!, make MaxPackageSize smaller");
-            if(req2_ongoing) MPI_Wait(&req2, MPI_STATUS_IGNORE);
+            if(ShareRequest_ongoing[target]) MPI_Wait(&ShareRequests[target], MPI_STATUS_IGNORE);
             MPI_Issend(sendstreams[target].str().c_str(), strlen(sendstreams[target].str().c_str()), MPI_CHAR, target,
-                       OneSided::MessageType::WORK_EXCHANGE, MPI_COMM_WORLD, &req2);
-            req2_ongoing = true;
+                       OneSided::MessageType::WORK_EXCHANGE, MPI_COMM_WORLD, &ShareRequests[target]);
+            ShareRequest_ongoing[target]= true;
             IdleProcAsksForWork = 0;
         }
 
@@ -295,8 +296,9 @@ Subproblem_Params MPI_Scheduler_OneSided<Prob_Consts, Subproblem_Params, Domain_
     MPI_Barrier(MPI_COMM_WORLD);
 
     // receive possible messages
-    if(req2_ongoing){
-        MPI_Request_free(&req2);
+    for(int i = 0; i < num; i++)
+    if(ShareRequest_ongoing[i]){
+        MPI_Request_free(&ShareRequests[i]);
     }
     if(workReq !=  MPI_REQUEST_NULL){
         MPI_Request_free(&workReq);

@@ -23,7 +23,7 @@
 #if MPI_LOGGING
 #define printProc(x) {int __id; \
                      MPI_Comm_rank(MPI_COMM_WORLD, &__id); \
-                     std::cout << "proc "<< __id <<": " << x << std::endl;}
+                     if(__id == 1)std::cout << "proc "<< __id <<": " << x << std::endl;}
 #endif
 #if OMP_LOGGING
 #define printProc(x)  { std::cout << "proc (omp) "<< omp_get_thread_num() <<": " << x << std::endl;}
