@@ -1,32 +1,55 @@
 #pragma once
+
 #include "MPI_Scheduler.h"
+#include <iomanip>
 
 namespace BnB {
     template<typename Prob_Consts, typename Subproblem_Params, typename Domain_Type>
-    class MPI_Scheduler_Hybrid : public MPI_Scheduler<Prob_Consts, Subproblem_Params, Domain_Type> {
+    class MPI_Scheduler_MasterWorker : public MPI_Scheduler<Prob_Consts, Subproblem_Params, Domain_Type> {
     public:
-
-
-        Subproblem_Params Execute(const Problem_Definition <Prob_Consts, Subproblem_Params, Domain_Type> &Problem_Def,
+        Subproblem_Params Execute(const Problem_Definition<Prob_Consts, Subproblem_Params, Domain_Type> &Problem_Def,
                                   const Prob_Consts &prob,
-                                  const MPI_Message_Encoder <Subproblem_Params> &encoder,
+                                  const MPI_Message_Encoder<Subproblem_Params> &encoder,
                                   const Goal goal,
                                   const Domain_Type WorstBound) override;
 
-        MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Type> *Threads(size_t num) {OpenMPThreads = num; return this;}
 
-    private:
-        int OpenMPThreads = 1;
     };
 
 
+/* Master:
+ * send initial problem
+ *      while(procs not all idle)
+ *      receive Message
+ *      case Slave Request:
+ *          master gets local bound and number of slaves needed
+ *          he updated his new bound and sends the new one to the slave together with ids of the procs
+ *
+ *      case Processor is Idle:
+ *          set as idle
+ *
+ *      case Processor found a solution which is not divisible anymore
+ *          bound is received and checked against the current best bound
+ *          overwritten if needed
+ *
+ * Worker:
+ *      while(not terminated)
+ *          receive Message
+ *          case New Problem:
+ *              push it to queue and update bound if needed
+ *              if we found a solution which cant be expanded we send it to master
+ *              but only of it also has the best LocalBound currently
+ *              expand the problem and ask the master for slaves
+ *
+ */
     template<typename Prob_Consts, typename Subproblem_Params, typename Domain_Type>
-    Subproblem_Params MPI_Scheduler_Hybrid<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(
-            const Problem_Definition <Prob_Consts, Subproblem_Params, Domain_Type> &Problem_Def,
+    Subproblem_Params MPI_Scheduler_MasterWorker<Prob_Consts, Subproblem_Params, Domain_Type>::Execute(
+            const Problem_Definition<Prob_Consts, Subproblem_Params, Domain_Type> &Problem_Def,
             const Prob_Consts &prob,
-            const MPI_Message_Encoder <Subproblem_Params> &encoder,
+            const MPI_Message_Encoder<Subproblem_Params> &encoder,
             const Goal goal,
             const Domain_Type WorstBound) {
+        bool RequestOngoing = false;
         int pid, num;
         MPI_Comm_rank(MPI_COMM_WORLD, &pid);
         MPI_Comm_size(MPI_COMM_WORLD, &num);
@@ -35,35 +58,33 @@ namespace BnB {
         MPI_Request SlaveReq;
         std::vector<MPI_Request> req(num);
         std::vector<bool> OpenRequests(num, false);
-        bool RequestOngoing = false;
-        int TasksDone = 0;
-
-        omp_lock_t QueueLock;
-        omp_init_lock(&QueueLock);
 
         std::vector<std::stringstream> sendstreams(num);
         for (auto &stream : sendstreams)
             stream << std::setprecision(15);
         std::stringstream receivstream("");
         receivstream << std::setprecision(15);
-        Subproblem_Params BestSubproblem = Problem_Def.GetInitialSubproblem(prob);
 
+        Subproblem_Params BestSubproblem = Problem_Def.GetInitialSubproblem(prob);
+        int NumProblemsSolved = 0;
+        int ProblemsEliminated = 0;
 
         if (pid == 0) {
-            printProc("threads: " << this->OpenMPThreads)
-            ///BestSubproblem = SplittingMasterBehavior(sendstreams, receivstream, Problem_Def, prob, encoder, goal, WorstBound);
-            BestSubproblem = DefaultMasterBehavior(sendstreams, receivstream, Problem_Def, prob, encoder, goal, WorstBound);
-        } else { // Worker
+            BestSubproblem = DefaultMasterBehavior(sendstreams, receivstream, Problem_Def, prob, encoder, goal,
+                                                   WorstBound);
+        } else {
             char buffer[20000];
-            // local variables of
+            // local variables of slave
             std::deque<Subproblem_Params> LocalTaskQueue;
             Domain_Type LocalBestBound = WorstBound;
+
             int counter = 0;
 
             while (true) {
                 MPI_Recv(buffer, 20000, MPI_CHAR, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
                 receivstream.str(buffer);
-                if (st.MPI_TAG == PtoP::MessageType::PROB) {
+                if (st.MPI_TAG == PtoP::MessageType::PROB) { // is 0 if equal
+                    //slave has been given a partially solved problem to expand
                     int NumOfProblems;
                     receivstream >> NumOfProblems;
                     for (int i = 0; i < NumOfProblems; i++) {
@@ -74,79 +95,54 @@ namespace BnB {
 
                     Domain_Type newBoundValue;
                     receivstream >> newBoundValue;
-                    // the new work package comes with a bound, check if the bound is better
+                    // for debugging it should not be the case that anyone sends a worse bound then what we already have
                     if (((bool) goal && newBoundValue >= LocalBestBound)
                         || (!(bool) goal && newBoundValue <= LocalBestBound)) {
                         LocalBestBound = newBoundValue;
                     }
 
                     while (!LocalTaskQueue.empty()) {
-                        counter = 1;
-                        int dynamicThreads = std::min(this->OpenMPThreads, (int) LocalTaskQueue.size());
-#pragma omp parallel num_threads(dynamicThreads)  shared(LocalBestBound, LocalTaskQueue, BestSubproblem, counter)
-                        {
-                            while (counter % this->Communication_Frequency != 0) {
-                                #pragma omp atomic
-                                counter = counter + 1;
-                                #pragma omp atomic
-                                TasksDone = TasksDone + 1;
+                        NumProblemsSolved++;
+                        //take out one element from queue, expand it
+                        Subproblem_Params sol = GetNextSubproblem(LocalTaskQueue, this->mode);
 
-                                Subproblem_Params sol;
-                                bool isEmpty = false;
-                                omp_set_lock(&QueueLock);
-                                isEmpty = LocalTaskQueue.empty();
-                                if (!isEmpty) {
-                                    sol = GetNextSubproblem(LocalTaskQueue, this->mode);
-                                }
-                                omp_unset_lock(&QueueLock);
-                                if (isEmpty)
-                                    break;
-
-                                //ignore if its bound is worse than already known best sol.
-                                auto[LowerBound, UpperBound] = Problem_Def.GetEstimateForBounds(prob, sol);
-                                if (((bool) goal && LowerBound < LocalBestBound)
-                                    || (!(bool) goal && LowerBound > LocalBestBound)) {
-                                    continue;
-                                }
-                                // try to make the bound better
-                                auto Feasibility = Problem_Def.IsFeasible(prob, sol);
-                                Domain_Type CandidateBound;
-                                if (Feasibility == BnB::FEASIBILITY::Full) {
-                                    CandidateBound = Problem_Def.GetContainedUpperBound(prob, sol);
-#pragma omp critical
-                                    {
-                                        if (((bool) goal && CandidateBound >= LocalBestBound)
-                                            || (!(bool) goal && CandidateBound <= LocalBestBound)) {
-                                            LocalBestBound = CandidateBound;
-                                            BestSubproblem = sol;
-                                        }
-                                    }
-                                } else if (Feasibility == BnB::FEASIBILITY::PARTIAL) {
-                                    CandidateBound = UpperBound;
-                                } else if (Feasibility == BnB::FEASIBILITY::NONE)
-                                    continue;
-
-
-                                // check if we cant divide further
-                                if (std::abs(CandidateBound - LowerBound) > this->eps) {
-                                    std::vector<Subproblem_Params> v;
-                                    v = Problem_Def.SplitSolution(prob, sol);
-                                    for (auto &&el : v) {
-                                        auto[Lower, Upper] = Problem_Def.GetEstimateForBounds(prob, el);
-                                        if (((bool) goal && Lower < LocalBestBound)
-                                            || (!(bool) goal && Lower > LocalBestBound)) {
-                                            continue;
-                                        }
-                                        omp_set_lock(&QueueLock);
-                                        LocalTaskQueue.push_back(el);
-                                        omp_unset_lock(&QueueLock);
-                                    }
-                                }
-                            }
-#pragma omp barrier
+                        //ignore if its bound is worse than already known best sol.
+                        auto[LowerBound, UpperBound] = Problem_Def.GetEstimateForBounds(prob, sol);
+                        if (((bool) goal && LowerBound < LocalBestBound)
+                            || (!(bool) goal && LowerBound > LocalBestBound)) {
+                            ProblemsEliminated++;
+                            continue;
                         }
 
-                        if (!RequestOngoing && !LocalTaskQueue.empty()) {
+                        // try to make the bound better only if the solution lies in a feasible domain
+                        auto Feasibility = Problem_Def.IsFeasible(prob, sol);
+                        Domain_Type CandidateBound;
+                        bool IsPotentialCandidate = false;
+                        if (Feasibility == BnB::FEASIBILITY::Full) {
+                            CandidateBound = (Problem_Def.GetContainedUpperBound(prob, sol));
+                            if (((bool) goal && CandidateBound >= LocalBestBound)
+                                || (!(bool) goal && CandidateBound <= LocalBestBound)) {
+                                IsPotentialCandidate = true;
+                                LocalBestBound = CandidateBound;
+                            }
+                        } else if (Feasibility == BnB::FEASIBILITY::PARTIAL) {
+                            // use our backup for the CandidateBound
+                            CandidateBound = UpperBound;
+                        } else if (Feasibility == BnB::FEASIBILITY::NONE) // basically discard again
+                            continue;
+
+                        std::vector<Subproblem_Params> v;
+                        if (std::abs(CandidateBound - LowerBound) > this->eps) { // epsilon criterion for convergence
+                            v = Problem_Def.SplitSolution(prob, sol);
+                            for (auto &&el : v) {
+                                LocalTaskQueue.push_back(el);
+                            }
+                        } else if (IsPotentialCandidate) {
+                            BestSubproblem = sol;
+                        }
+
+                        // request master for slaves
+                        if (counter % this->Communication_Frequency == 0 and !RequestOngoing) {
                             sendstreams[0].str("");
                             sendstreams[0] << LocalBestBound << " ";
                             sendstreams[0] << (int) LocalTaskQueue.size() << " ";
@@ -207,16 +203,19 @@ namespace BnB {
                             }
                         }
 
+                        counter++;
                     }
-
                     //This slave has now become idle (its queue is empty). Inform master.
                     sendstreams[0].str("");
-                    MPI_Ssend(&sendstreams[0].str()[0], 0, MPI_CHAR, 0, PtoP::MessageType::IDLE, MPI_COMM_WORLD);
+                    MPI_Ssend(&sendstreams[0].str()[0], 10, MPI_CHAR, 0, PtoP::MessageType::IDLE, MPI_COMM_WORLD);
                 } else if (st.MPI_TAG == PtoP::MessageType::FINISH) {
-                    break;
-                } else if (st.MPI_TAG == PtoP::MessageType::GET_WORKERS) {
+                    printProc(
+                            "I have solved " << NumProblemsSolved << " problems and eliminated " << ProblemsEliminated);
+                    break; // empty solution only master will return a meaningful solution
+                } else if (st.MPI_TAG == PtoP::MessageType::GET_WORKERS) { // this is only a deadlock prevention measure
                     RequestOngoing = false;
                     //get master's response
+                    receivstream.str(buffer);
                     int slaves_avbl;
                     Domain_Type MastersBound;
                     receivstream >> MastersBound;
@@ -247,17 +246,15 @@ namespace BnB {
             }
         }
 
-        omp_destroy_lock(&QueueLock);
-
-
-        printProc("I have done " << TasksDone)
-
+        // cleanup
         if (pid != 0) {
             if (RequestOngoing)
                 MPI_Request_free(&SlaveReq);
             for (int i = 1; i < num; i++)
                 if (OpenRequests[i]) MPI_Request_free(&req[i]);
         }
+
+
         // ------------------------ ALL procs have a best solution now master has to gather it
         return ExtractBestSolution<Prob_Consts, Subproblem_Params, Domain_Type>(sendstreams[0], receivstream,
                                                                                 BestSubproblem,
@@ -266,6 +263,5 @@ namespace BnB {
                                                                                 encoder,
                                                                                 goal);
     }
-
 
 }

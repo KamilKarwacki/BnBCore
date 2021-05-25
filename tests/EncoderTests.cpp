@@ -1,9 +1,8 @@
 #include<gtest/gtest.h>
-#include "../include/MPI_Message_Encoder.h"
+#include "../include/Distributed/MPI_Message_Encoder.h"
 #include <tuple>
-#include <sstream>
 
-TEST(BasicTypeTest, DemonstratedGTestMacros)
+TEST(EncoderTest, BasicTypeTest)
 {
 	std::stringstream ss("");
 
@@ -22,7 +21,7 @@ TEST(BasicTypeTest, DemonstratedGTestMacros)
 }	
 
 
-TEST(VectorTest, DemonstratedGTestMacros)
+TEST(EncoderTest, VectorTest)
 {
 	std::stringstream ss("");
 

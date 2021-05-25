@@ -4,6 +4,8 @@
 
 // factory function that returns a LP problem definition
 // used for testing solvers, and as an example of how to use the library
+// TODO not finished because a good simplex subroutine is needed
+
 
 namespace BnB::IP{
     using Consts = Problem_Constants<

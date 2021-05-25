@@ -4,11 +4,10 @@
 #include "BnB_OMP_Solver.h"
 
 
-
 TEST(OMPKnapsack, someItemsFit)
 {
-	Solver_omp<BnB::Knapsack::Consts, BnB::Knapsack::Params, int> solver;
-	solver.setNumThreads(4);
+	BnB::Solver_OMP<BnB::Knapsack::Consts, BnB::Knapsack::Params, int> solver;
+	solver.SetNumThreads(4);
 
 	BnB::Knapsack::Consts TestConsts;
 	std::get<0>(TestConsts) = {3,3,3,3,3};
@@ -25,8 +24,8 @@ TEST(OMPKnapsack, someItemsFit)
 
 TEST(OMPKnapsack, allItemsFit)
 {
-	Solver_omp<BnB::Knapsack::Consts, BnB::Knapsack::Params, int> solver;
-	solver.setNumThreads(4);
+	BnB::Solver_OMP<BnB::Knapsack::Consts, BnB::Knapsack::Params, int> solver;
+	solver.SetNumThreads(4);
 
 	BnB::Knapsack::Consts TestConsts;
 	std::get<0>(TestConsts) = {3,3,3,3,3};
@@ -43,10 +42,11 @@ TEST(OMPKnapsack, allItemsFit)
 	
 }
 
+
 TEST(OMPKnapsack, NoItemsFit)
 {	
-	Solver_omp<BnB::Knapsack::Consts, BnB::Knapsack::Params, int> solver;
-	solver.setNumThreads(4);
+	BnB::Solver_OMP<BnB::Knapsack::Consts, BnB::Knapsack::Params, int> solver;
+	solver.SetNumThreads(4);
 
 	BnB::Knapsack::Consts TestConsts;
 	std::get<0>(TestConsts) = {3,3,3,3,3};

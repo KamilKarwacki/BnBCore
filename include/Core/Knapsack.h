@@ -87,21 +87,13 @@ namespace BnB::Knapsack {
             return std::tuple(std::get<3>(params), -1);
         };
 
-	if(false)
-           KnapsackProblem.GetContainedUpperBound = [](const Consts &consts, const Params &params) {
-               int w = std::get<1>(params);
-               int cost = std::get<2>(params);
+#if GOODUPPER
+        KnapsackProblem.GetContainedUpperBound = [](const Consts &consts, const Params &params) {
+            int w = std::get<1>(params);
+            int cost = std::get<2>(params);
 
-               float bound = cost;
-               return  bound;
-           };
-	else
-           KnapsackProblem.GetContainedUpperBound = [](const Consts &consts, const Params &params) {
-               int w = std::get<1>(params);
-               int cost = std::get<2>(params);
-
-               float bound = cost;
-            	for (int j = std::get<0>(params).size(); j < std::get<0>(consts).size(); j++) {
+            float bound = cost;
+            for (int j = std::get<0>(params).size(); j < std::get<0>(consts).size(); j++) {
                 if(w == std::get<2>(consts))
                     break;
                 else if(w + std::get<0>(consts)[j] <= std::get<2>(consts))
@@ -109,9 +101,18 @@ namespace BnB::Knapsack {
                     bound += std::get<1>(consts)[j];
                     w += std::get<0>(consts)[j];
                 }
-            }	
-               return  bound;
-           };
+            }
+            return  bound;
+        };
+#else
+        KnapsackProblem.GetContainedUpperBound = [](const Consts &consts, const Params &params) {
+            int w = std::get<1>(params);
+            int cost = std::get<2>(params);
+
+            float bound = cost;
+            return  bound;
+        };
+#endif
 
         KnapsackProblem.IsFeasible = [](const Consts &consts, const Params &params) {
            // return std::get<0>(consts).size() != std::get<0>(params).size() ? BnB::FEASIBILITY::PARTIAL : BnB::FEASIBILITY::Full;

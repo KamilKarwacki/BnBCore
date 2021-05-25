@@ -1,68 +1,86 @@
 #include<gtest/gtest.h>
-#include "Knapsack.h"
-#include "Base.h"
-#include "BnB_MPI_Solver.h"
+#include "../include/Core/Knapsack.h"
+#include "../include/Core/Base.h"
+#include "../include/Distributed/BnB_MPI_Solver.h"
 
 
-void TestResult(std::vector<int> result, std::vector<int> costs, int target)
+int GetTotalValue(BnB::Knapsack::Params& t,BnB::Knapsack::Consts& C)
 {
-	int id;
-	MPI_Comm_rank(MPI_COMM_WORLD, &id);
-	if(id == 0)
-	{	
-	int cost = 0;
-	for(const auto& item : result)
-		{
-			cost += costs[item];
-		}
-	EXPECT_EQ(cost,  target) <<  "Weight does not match";
-	}
+    // perform greedy to finish it
+    int w = std::get<1>(t);
+    int cost = std::get<2>(t);
+
+    float bound = cost;
+    for (int j = std::get<0>(t).size(); j < std::get<0>(C).size(); j++) {
+        if (w == std::get<2>(C))
+            break;
+        else if (w + std::get<0>(C)[j] <= std::get<2>(C)) {
+            bound += std::get<1>(C)[j];
+            w += std::get<0>(C)[j];
+        }
+    }
+    return std::get<3>(t);
 }
+
 
 
 TEST(MPIKnapsack, someItemsFit)
 {
-	Solver_MPI<BnB::Knapsack::Consts, BnB::Knapsack::Params, int> solver;
-	solver.SetScheduler(MPI_Scheduler_Type::DEFAULT);
+	BnB::Solver_MPI<BnB::Knapsack::Consts, BnB::Knapsack::Params, int> solver;
+	solver.SetScheduler(BnB::MPI_Scheduler_Type::PRIORITY);
 
 	BnB::Knapsack::Consts TestConsts;
 	std::get<0>(TestConsts) = {3,3,3,3,3};
 	std::get<1>(TestConsts) = {10,2,10,4,10};
 	std::get<2>(TestConsts) = 10;	
 
-	auto result  = std::get<0>(solver.Maximize(BnB::Knapsack::GenerateToyProblem(), TestConsts));
-	
-	TestResult(result, std::get<1>(TestConsts), 30);	
-	
-}	
+	auto result  = solver.Maximize(BnB::Knapsack::GenerateToyProblem(), TestConsts);
+
+    int id;
+    MPI_Comm_rank(MPI_COMM_WORLD, &id);
+    if(id == 0)
+    {
+        EXPECT_EQ(GetTotalValue(result,TestConsts),  30) <<  "Weight does not match";
+    }
+}
 
 
 TEST(MPIKnapsack, allItemsFit)
 {
-	Solver_MPI<BnB::Knapsack::Consts, BnB::Knapsack::Params, int> solver;
+	BnB::Solver_MPI<BnB::Knapsack::Consts, BnB::Knapsack::Params, int> solver;
 
 	BnB::Knapsack::Consts TestConsts;
 	std::get<0>(TestConsts) = {3,3,3,3,3};
 	std::get<1>(TestConsts) = {10,2,10,4,10};
 	std::get<2>(TestConsts) = 100;	
 
-	auto result  = std::get<0>(solver.Maximize(BnB::Knapsack::GenerateToyProblem(), TestConsts));
+	auto result  = solver.Maximize(BnB::Knapsack::GenerateToyProblem(), TestConsts);
 
-	TestResult(result, std::get<1>(TestConsts), 36);	
+    int id;
+    MPI_Comm_rank(MPI_COMM_WORLD, &id);
+    if(id == 0)
+    {
+        EXPECT_EQ(GetTotalValue(result,TestConsts),  36) <<  "Weight does not match";
+    }
 }
 
 TEST(MPIKnapsack, NoItemsFit)
 {
-	Solver_MPI<BnB::Knapsack::Consts, BnB::Knapsack::Params, int> solver;
+	BnB::Solver_MPI<BnB::Knapsack::Consts, BnB::Knapsack::Params, int> solver;
 
 	BnB::Knapsack::Consts TestConsts;
 	std::get<0>(TestConsts) = {3,3,3,3,3};
 	std::get<1>(TestConsts) = {10,2,10,4,10};
 	std::get<2>(TestConsts) = 1;	
 	
-	auto result  = std::get<0>(solver.Maximize(BnB::Knapsack::GenerateToyProblem(), TestConsts));
+    auto result  = solver.Maximize(BnB::Knapsack::GenerateToyProblem(), TestConsts);
 
-	TestResult(result, std::get<1>(TestConsts), 0);	
+    int id;
+    MPI_Comm_rank(MPI_COMM_WORLD, &id);
+    if(id == 0)
+    {
+        EXPECT_EQ(GetTotalValue(result,TestConsts),  0) <<  "Weight does not match";
+    }
 }
 
 int main(int argc, char* argv[])
