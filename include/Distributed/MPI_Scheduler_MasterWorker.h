@@ -12,8 +12,6 @@ namespace BnB {
                                   const MPI_Message_Encoder<Subproblem_Params> &encoder,
                                   const Goal goal,
                                   const Domain_Type WorstBound) override;
-
-
     };
 
 
@@ -203,11 +201,12 @@ namespace BnB {
                             }
                         }
 
+
                         counter++;
                     }
                     //This slave has now become idle (its queue is empty). Inform master.
                     sendstreams[0].str("");
-                    MPI_Ssend(&sendstreams[0].str()[0], 10, MPI_CHAR, 0, PtoP::MessageType::IDLE, MPI_COMM_WORLD);
+                    MPI_Ssend(&sendstreams[0].str()[0], 0, MPI_CHAR, 0, PtoP::MessageType::IDLE, MPI_COMM_WORLD);
                 } else if (st.MPI_TAG == PtoP::MessageType::FINISH) {
                     printProc(
                             "I have solved " << NumProblemsSolved << " problems and eliminated " << ProblemsEliminated);
@@ -263,5 +262,4 @@ namespace BnB {
                                                                                 encoder,
                                                                                 goal);
     }
-
 }

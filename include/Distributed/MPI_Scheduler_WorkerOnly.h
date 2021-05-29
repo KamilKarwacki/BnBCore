@@ -61,8 +61,8 @@ namespace BnB {
         auto *IdleStatusArray = new int[num];
 
         int BoundToTerminationCheckRatio = this->TerminationCheckFrequency / this->Communication_Frequency;
-        assert(BoundToTerminationCheckRatio > 1 &&
-               "in order for the algorithm to work the bound exchange needs to be done more frequently than termination");
+		std::cout << "TermFreq: " << this->TerminationCheckFrequency << " CommFreq: " << this->Communication_Frequency << std::endl;
+        assert(BoundToTerminationCheckRatio > 1 && "in order for the algorithm to work the bound exchange needs to be done more frequently than termination.");
 
         char buffer[20000];
         int NumMessages = 0;

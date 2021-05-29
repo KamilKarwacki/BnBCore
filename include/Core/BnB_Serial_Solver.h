@@ -19,6 +19,9 @@ namespace BnB {
         // minimizes a problem defined by the user
         Subproblem_Params
         Minimize(const Problem_Definition <Problem_Consts, Subproblem_Params, Domain_Type> &, const Problem_Consts &);
+
+        // return instance of scheduler who exposes his parameter setter functions
+        Serial_Scheduler<Problem_Consts, Subproblem_Params, Domain_Type>* SetSchedulerParameters() {return scheduler.get();}
     private:
         std::unique_ptr<Serial_Scheduler<Problem_Consts, Subproblem_Params, Domain_Type>> scheduler =
                 std::make_unique<Serial_Scheduler_Default<Problem_Consts, Subproblem_Params, Domain_Type>>();

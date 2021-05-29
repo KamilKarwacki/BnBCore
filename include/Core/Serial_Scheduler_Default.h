@@ -58,7 +58,7 @@ namespace BnB {
                 continue;
 
             std::vector<Subproblem_Params> v;
-            if (std::abs(CandidateBound - LowerBound) > this->Eps) { // epsilon criterion for convergence
+            if (std::abs(CandidateBound - LowerBound) > this->EPS) { // epsilon criterion for convergence
                 v = Problem_Def.SplitSolution(prob, sol);
                 std::move(std::begin(v), std::end(v), std::back_inserter(TaskQueue));
             }

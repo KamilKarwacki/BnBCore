@@ -13,7 +13,6 @@ namespace BnB{
                 const Goal goal,
                 const Domain_Type WorstBound) = 0;
 
-
         Serial_Scheduler<Prob_Consts, Subproblem_Params, Domain_Type> *Eps(Domain_Type e) {EPS = e; return this;}
         Serial_Scheduler<Prob_Consts, Subproblem_Params, Domain_Type> *TraversMode(TraversalMode m) {mode = m; return this;};
 

@@ -2,6 +2,7 @@
 
 #include "Base.h"
 #include <random>
+#define GOODUPPER 1
 
 // factory function that returns a toy problem
 // used for testing solvers, and as an example of how to use the library
