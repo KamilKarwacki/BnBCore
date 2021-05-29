@@ -203,6 +203,7 @@ namespace BnB {
             }
 
 
+            // the next following blocks alternate between communicating bounds and termination checks
             counter++;
             if (BoundComm) {
                 if ((counter % this->Communication_Frequency == 0) && !IallgatherOngoing) {
@@ -263,7 +264,7 @@ namespace BnB {
             if (IdleProcAsksForWork == 1) {
                 MPI_Recv(buffer, 1, MPI_CHAR, st.MPI_SOURCE, Collective::MessageType::IDLE_PROC_WANTS_WORK,
                          MPI_COMM_WORLD, &st);
-                printProc("CLEARNUP SUCCESSFULL" << __LINE__)
+                printProc("CLEARNUP SUCCESSFULL " << __LINE__)
             }
 
             int requestReceived = 0;
@@ -272,7 +273,7 @@ namespace BnB {
             if (requestReceived == 1) {
                 MPI_Recv(buffer, 100000, MPI_CHAR, st.MPI_SOURCE, Collective::MessageType::WORK_EXCHANGE,
                          MPI_COMM_WORLD, &throwAway);
-                printProc("CLEARNUP SUCCESSFULL" << __LINE__)
+                printProc("CLEARNUP SUCCESSFULL " << __LINE__)
             }
 
         }
